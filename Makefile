@@ -2,17 +2,17 @@ SHELL := /bin/bash
 
 GO ?= go
 GOFMT ?= gofmt
-BIN_NAME ?= mycli
+BIN_NAME ?= agentscript
 CMD_PATH ?= ./cmd/$(BIN_NAME)
 DIST_DIR ?= dist
 BIN_PATH ?= $(DIST_DIR)/$(BIN_NAME)
 VERSION ?= $(shell node -p "require('./package.json').version" 2>/dev/null)
-LDFLAGS ?= -s -w -X github.com/amxv/go-cli-template/internal/buildinfo.Version=$(if $(VERSION),$(VERSION),dev)
+LDFLAGS ?= -s -w -X github.com/amxv/agentscript/internal/buildinfo.Version=$(if $(VERSION),$(VERSION),dev)
 
 .PHONY: help fmt test vet lint check build build-all install-local clean release-tag
 
 help:
-	@echo "go-cli-template command runner"
+	@echo "agentscript command runner"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make fmt          - format Go files"
@@ -20,9 +20,9 @@ help:
 	@echo "  make vet          - run go vet ./..."
 	@echo "  make lint         - run Node script checks"
 	@echo "  make check        - fmt + test + vet + lint"
-	@echo "  make build        - build local binary to dist/mycli"
+	@echo "  make build        - build local binary to dist/agentscript"
 	@echo "  make build-all    - build release binaries for 5 target platforms"
-	@echo "  make install-local- install CLI to ~/.local/bin/mycli"
+	@echo "  make install-local- install CLI to ~/.local/bin/agentscript"
 	@echo "  make clean        - remove dist artifacts"
 	@echo "  make release-tag  - create and push git tag (requires VERSION=x.y.z)"
 

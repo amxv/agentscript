@@ -1,33 +1,32 @@
 export const siteConfig = {
-  name: "mycli",
-  strapline: "A Go CLI shipped through npm",
+  name: "agentscript",
+  strapline: "Readable agent transcripts in your terminal",
   description:
-    "Documentation for mycli, a starter Go command-line tool template with npm distribution, GitHub release automation, and an embedded ZueDocs-powered docs site.",
-  repoUrl: "https://github.com/amxv/go-cli-template",
+    "Documentation for agentscript, a Go CLI for opening, searching, filtering, and slicing Claude Code and Codex JSONL transcripts.",
+  repoUrl: "https://github.com/amxv/agentscript",
   footerSections: [
     {
-      title: "mycli",
+      title: "agentscript",
       text:
-        "A starter Go CLI template with native binaries, npm installation, release automation, and docs included from day one."
+        "A terminal-first transcript reader for Claude Code and Codex sessions with stable block indexes and scriptable filters."
     },
     {
       title: "What this site covers",
       text:
-        "Installation, local development, command customization, release workflow, npm packaging, and docs site maintenance."
+        "Opening transcripts, searching sessions, hiding noisy blocks, slicing by stable indexes, and exporting readable context."
     },
     {
       title: "Repository",
       linkPrefix: "Source: ",
-      linkHref: "https://github.com/amxv/go-cli-template",
-      linkLabel: "github.com/amxv/go-cli-template"
+      linkHref: "https://github.com/amxv/agentscript",
+      linkLabel: "github.com/amxv/agentscript"
     }
   ]
 } as const;
 
 export const docCategories = [
   "Start",
-  "Development",
-  "Distribution",
+  "Workflows",
   "Reference"
 ] as const;
 

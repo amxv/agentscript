@@ -6,7 +6,7 @@ const https = require("node:https");
 const { spawnSync } = require("node:child_process");
 
 const pkg = require("../package.json");
-const cliName = pkg.config?.cliBinaryName || "mycli";
+const cliName = pkg.config?.cliBinaryName || "agentscript";
 
 const repoURL = pkg.repository?.url || "";
 const repoMatch = repoURL.match(/github\.com[:/](.+?)\/(.+?)(?:\.git)?$/);
@@ -39,7 +39,7 @@ const destination = path.join(binDir, binaryName);
 
 function buildLdflags(version) {
   const resolvedVersion = `${version || ""}`.trim() || "dev";
-  return `-s -w -X github.com/amxv/go-cli-template/internal/buildinfo.Version=${resolvedVersion}`;
+  return `-s -w -X github.com/amxv/agentscript/internal/buildinfo.Version=${resolvedVersion}`;
 }
 
 async function main() {

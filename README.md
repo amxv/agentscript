@@ -1,84 +1,134 @@
-# go-cli-template
+# agentscript
 
-Minimal template for shipping a Go CLI with:
+`agentscript` is a terminal-first transcript reader for Claude Code and Codex JSONL sessions.
 
-- a local command runner (`Makefile`)
-- npm global install wrapper (`bin/mycli.js`)
-- automatic GitHub Release + npm publish on tag
-- bundled ZueDocs-powered docs site
+It turns local agent transcripts into readable, indexed blocks so you can search, inspect, hide noisy parts, and slice exactly the context you want to preserve.
 
-## Install (template example)
+## Install
 
 ```bash
-npm i -g @amxv/go-cli-template
-mycli --help
+npm i -g @amxv/agentscript
+agentscript --help
 ```
 
-## Commands in this starter
+For local development:
 
 ```bash
-mycli --help
-mycli hello
-mycli hello <name>
-mycli --version
+make build
+./dist/agentscript --help
 ```
 
-## Docs site
+## Core workflow
 
-This template includes an Astro docs site powered by ZueDocs.
+Open a transcript by path:
 
 ```bash
-bun install
-bun run docs:dev
-bun run docs:check
-bun run docs:build
+agentscript open ~/.claude/projects/<project>/<session>.jsonl
+agentscript open ~/.codex/sessions/<year>/<month>/<day>/<session>.jsonl
 ```
 
-Customize the docs alongside the CLI:
+Or open the latest transcript discovered under the default roots:
 
-- `src/data/docs.ts`: site name, repo URL, footer sections, nav, categories
-- `src/pages/index.astro`: landing page
-- `src/content/docs/*.md`: guides and command reference
+```bash
+agentscript open --latest 1
+```
 
-## Customize this template
+Run `agentscript open` with no path to launch the latest-transcript picker. The picker searches:
 
-1. Rename your command and entrypoint:
-- `cmd/mycli`
-- `bin/mycli.js`
-- `package.json` (`bin`, `config.cliBinaryName`)
-- `.github/workflows/release.yml` (`CLI_BINARY`)
+```bash
+~/.claude/projects
+~/.codex/sessions
+```
 
-2. Update module + repo identity:
-- `go.mod` module path
-- `package.json` (`name`, `repository`, `homepage`, `bugs`)
+## Readable block indexes
 
-3. Replace starter logic:
-- `internal/app/app.go`
-- `internal/app/app_test.go`
+Every renderable block gets a stable index:
 
-4. Update bundled docs:
-- `src/data/docs.ts`
-- `src/pages/index.astro`
-- `src/content/docs/*.md`
+```text
+#000 user
+#001 thinking
+#002 assistant
+#003 command Bash
+#004 command_result Bash
+#005 tool_call Edit
+#006 tool_result Edit
+```
 
-5. Keep release flow:
-- push tags like `v0.2.0`
-- workflow builds binaries + creates GitHub release + publishes npm
+Hidden blocks keep their original indexes, so slices remain stable even when you hide thinking or tool output.
 
-## Project layout
+## Slicing
 
-- `cmd/mycli/main.go`: CLI entrypoint
-- `internal/app/`: command logic
-- `internal/buildinfo/`: build-time version plumbing for `--version`
-- `scripts/postinstall.js`: installs binary from GitHub release (falls back to local `go build`)
-- `.github/workflows/release.yml`: automated release pipeline
-- `src/`: ZueDocs-powered documentation site
-- `astro.config.mjs`: docs site build config
-- `AGENTS.md`: instructions for coding agents
-- `CONTRIBUTORS.md`: maintainer/release operations
+Preserve the first 100 blocks of context:
 
-See `AGENTS.md` and `CONTRIBUTORS.md` for complete dev/release instructions.
+```bash
+agentscript slice transcript.jsonl 0:100 --format md --out context.md
+```
 
-## License
+Render from block 100 to the end:
 
-Apache 2.0
+```bash
+agentscript slice transcript.jsonl 100:
+```
+
+Show the last 80 renderable blocks:
+
+```bash
+agentscript open transcript.jsonl --last 80
+```
+
+Show context around a specific block:
+
+```bash
+agentscript open transcript.jsonl --around 100 --before 25 --after 50
+```
+
+## Filtering and toggles
+
+```bash
+agentscript open transcript.jsonl --hide-thinking
+agentscript open transcript.jsonl --hide-tools
+agentscript open transcript.jsonl --hide-tool-results
+agentscript open transcript.jsonl --hide-commands
+agentscript open transcript.jsonl --messages-only
+agentscript open transcript.jsonl --hide-tool Bash
+agentscript open transcript.jsonl --tools Bash,Edit
+```
+
+Flags can appear before or after the transcript path.
+
+## Search
+
+Search recent transcripts:
+
+```bash
+agentscript search "publish-pr"
+agentscript search "r2 cors" --provider claude --latest 20
+agentscript search "git status" --provider codex
+```
+
+Each result includes the matching block index and an `agentscript open ... --around <index>` command.
+
+## List discovered transcripts
+
+```bash
+agentscript list --latest 20
+agentscript list --provider codex
+```
+
+## Output formats
+
+```bash
+agentscript open transcript.jsonl --format text
+agentscript open transcript.jsonl --format md --out transcript.md
+agentscript open transcript.jsonl --format json --out normalized.json
+```
+
+## Development
+
+```bash
+make fmt
+make test
+make build
+```
+
+`tmp/claude-replay` is intentionally ignored and can be used as a local reference clone while working on parser behavior.

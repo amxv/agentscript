@@ -1,62 +1,60 @@
 ---
 title: Quickstart
-description: Install dependencies, run the starter CLI, and start the bundled ZueDocs site.
+description: Open Claude Code and Codex JSONL transcripts in a readable terminal format.
 order: 1
 category: Start
-summary: The fastest path from a fresh clone to a working CLI and local docs site.
+summary: Install agentscript, open a transcript, and render clean block-indexed output.
 ---
 
-## Clone and install
-
-Install Go, Node.js, and Bun, then install JavaScript dependencies:
+## Install
 
 ```bash
-bun install
+npm i -g @amxv/agentscript
+agentscript --help
 ```
 
-The repository uses Go for the CLI, Node for the npm wrapper, and Astro/ZueDocs for the docs site.
-
-## Run the starter CLI
-
-Use the make targets to validate and build the starter command:
+For local development from a clone:
 
 ```bash
-make check
 make build
-./dist/mycli --help
-./dist/mycli hello
+./dist/agentscript --help
 ```
 
-The sample command is intentionally small so it is easy to replace.
-
-## Start the docs site
-
-Run the embedded documentation site locally:
+## Open a transcript
 
 ```bash
-bun run docs:dev
+agentscript open ~/.claude/projects/<project>/<session>.jsonl
+agentscript open ~/.codex/sessions/<year>/<month>/<day>/<session>.jsonl
 ```
 
-Astro usually serves the site at `http://localhost:4321`.
+`open` is the main entry point. Running `agentscript` by itself shows help instead of opening anything.
 
-## First customization pass
-
-For a new CLI, start by renaming the command everywhere:
+## Open a recent transcript
 
 ```bash
-cmd/mycli
-bin/mycli.js
-package.json
-.github/workflows/release.yml
-Makefile
-src/data/docs.ts
+agentscript open --latest 1
+agentscript list --latest 20
 ```
 
-Then replace the starter command behavior in:
+By default, agentscript discovers transcripts in:
 
 ```bash
-internal/app/app.go
-internal/app/app_test.go
+~/.claude/projects
+~/.codex/sessions
 ```
 
-Keep the docs open while you edit so the quickstart, command reference, and release notes stay aligned with the actual CLI.
+Use a custom discovery root when needed:
+
+```bash
+agentscript list --roots ./fixtures,~/Desktop/transcripts
+```
+
+## Hide noisy blocks
+
+```bash
+agentscript open transcript.jsonl --hide-thinking
+agentscript open transcript.jsonl --messages-only
+agentscript open transcript.jsonl --hide-tool-results
+```
+
+Flags can appear before or after the transcript path.
