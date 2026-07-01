@@ -5,7 +5,7 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const pkg = require("../package.json");
-const cliName = pkg.config?.cliBinaryName || "mycli";
+const cliName = pkg.config?.cliBinaryName || "agentscript";
 const executableName = process.platform === "win32" ? `${cliName}.exe` : `${cliName}-bin`;
 const executablePath = path.join(__dirname, executableName);
 

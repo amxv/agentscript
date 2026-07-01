@@ -1,66 +1,52 @@
 ---
-title: Customize the CLI
-description: Rename the starter command, update project identity, and replace the starter command handlers safely.
-order: 2
-category: Development
-summary: The main checklist for turning mycli into a real Go command-line tool.
+title: Transcript model
+description: Understand how agentscript normalizes Claude Code and Codex JSONL into stable renderable blocks.
+order: 3
+category: Workflows
+summary: How block indexes, filtering, and slicing work.
 ---
 
-## Rename the command
+## Stable blocks
 
-The starter command is `mycli`. Rename it consistently before adding real behavior:
+agentscript parses Claude Code and Codex sessions into one stream of renderable blocks:
 
-```bash
-cmd/mycli                      # Go entrypoint directory
-bin/mycli.js                   # npm executable shim
-package.json                   # bin map and config.cliBinaryName
-.github/workflows/release.yml  # CLI_BINARY
-Makefile                       # BIN_NAME
+```text
+#000 user
+#001 thinking
+#002 assistant
+#003 command Bash
+#004 command_result Bash
+#005 tool_call Edit
+#006 tool_result Edit
 ```
 
-The release workflow and postinstall script assume a single binary name. Keep those values in sync.
+Indexes are assigned before filtering. This means `--hide-thinking` may show gaps, but the visible blocks still keep their original indexes.
 
-## Update package identity
+## Why this matters
 
-Update package metadata before publishing:
-
-```bash
-package.json name
-package.json description
-package.json repository
-package.json homepage
-package.json bugs
-package.json keywords
-go.mod module path
-```
-
-The postinstall script reads repository/package metadata to find release binaries, so stale package metadata can break npm installs.
-
-## Replace command logic
-
-The starter app logic lives in:
+Stable indexes make long transcript surgery easy. For example, if a session changed tasks around block 100, preserve the earlier context with:
 
 ```bash
-internal/app/app.go
-internal/app/app_test.go
+agentscript slice transcript.jsonl 0:100 --format md --out old-context.md
 ```
 
-Keep parsing and handlers small at first. Add command-specific help text as command groups grow.
-
-## Keep version plumbing
-
-`internal/buildinfo` exposes the version used by `--version`. Release builds inject the version with Go linker flags.
-
-For local development, the Makefile reads the version from `package.json` and passes it into the build.
-
-## Validate after changes
-
-Run the full local check before pushing:
+Then inspect the new task separately:
 
 ```bash
-make check
-bun run docs:check
-bun run docs:build
+agentscript slice transcript.jsonl 100:
 ```
 
-Run the docs commands serially. Astro can be sensitive to concurrent check/build work in the same repo.
+## Commands and tools
+
+Shell commands are separated from generic tool calls so they can be hidden independently:
+
+```bash
+agentscript open transcript.jsonl --hide-commands
+agentscript open transcript.jsonl --hide-tools
+```
+
+Tool and command results can be hidden while keeping the calls visible:
+
+```bash
+agentscript open transcript.jsonl --hide-tool-results
+```

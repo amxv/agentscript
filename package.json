@@ -1,25 +1,25 @@
 {
-  "name": "@amxv/go-cli-template",
+  "name": "@amxv/agentscript",
   "version": "0.1.0",
-  "description": "Template for shipping a Go CLI via npm with GitHub release automation",
+  "description": "Readable Claude Code and Codex JSONL transcript searcher, renderer, and slicer",
   "license": "MIT",
   "author": "amxv",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/amxv/go-cli-template.git"
+    "url": "git+https://github.com/amxv/agentscript.git"
   },
-  "homepage": "https://github.com/amxv/go-cli-template#readme",
+  "homepage": "https://github.com/amxv/agentscript#readme",
   "bugs": {
-    "url": "https://github.com/amxv/go-cli-template/issues"
+    "url": "https://github.com/amxv/agentscript/issues"
   },
   "bin": {
-    "mycli": "bin/mycli.js"
+    "agentscript": "bin/agentscript.js"
   },
   "config": {
-    "cliBinaryName": "mycli"
+    "cliBinaryName": "agentscript"
   },
   "files": [
-    "bin/mycli.js",
+    "bin/agentscript.js",
     "scripts/postinstall.js",
     "cmd",
     "internal",
@@ -32,7 +32,7 @@
   ],
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "test": "node --check bin/mycli.js && node --check scripts/postinstall.js",
+    "test": "node --check bin/agentscript.js && node --check scripts/postinstall.js",
     "lint": "npm run test",
     "docs:dev": "astro dev",
     "docs:build": "astro build",
@@ -43,11 +43,12 @@
     "node": ">=18"
   },
   "keywords": [
-    "go",
+    "claude-code",
+    "codex",
+    "jsonl",
+    "transcript",
     "cli",
-    "template",
-    "npm",
-    "release"
+    "agent"
   ],
   "devDependencies": {
     "@astrojs/check": "^0.9.4",

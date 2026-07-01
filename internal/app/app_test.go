@@ -2,72 +2,38 @@ package app
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
 
-func TestRunRootHelp(t *testing.T) {
-	var out bytes.Buffer
-	var errBuf bytes.Buffer
-
-	err := Run([]string{"--help"}, &out, &errBuf)
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
+func TestHelp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"--help"}, os.Stdin, &stdout, &stderr); err != nil {
+		t.Fatalf("Run help: %v", err)
 	}
-
-	if !strings.Contains(out.String(), "Usage:") {
-		t.Fatalf("expected help output, got: %q", out.String())
-	}
-	if !strings.Contains(out.String(), "--version") {
-		t.Fatalf("expected --version in help output, got: %q", out.String())
+	out := stdout.String()
+	for _, want := range []string{"agentscript", "open [path]", "slice <path> <range>", "search <query>"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("help missing %q in:\n%s", want, out)
+		}
 	}
 }
 
-func TestRunVersion(t *testing.T) {
-	var out bytes.Buffer
-	var errBuf bytes.Buffer
-
-	err := Run([]string{"--version"}, &out, &errBuf)
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
+func TestVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"--version"}, os.Stdin, &stdout, &stderr); err != nil {
+		t.Fatalf("Run version: %v", err)
 	}
-
-	if !strings.Contains(out.String(), "mycli ") {
-		t.Fatalf("unexpected version output: %q", out.String())
+	if !strings.HasPrefix(stdout.String(), "agentscript ") {
+		t.Fatalf("unexpected version output: %q", stdout.String())
 	}
 }
 
-func TestRunHello(t *testing.T) {
-	var out bytes.Buffer
-	var errBuf bytes.Buffer
-
-	err := Run([]string{"hello", "Codex"}, &out, &errBuf)
-	if err != nil {
-		t.Fatalf("Run returned error: %v", err)
-	}
-
-	got := out.String()
-	if got != "Hello, Codex!\n" {
-		t.Fatalf("unexpected output: %q", got)
-	}
-}
-
-func TestRunUnknownCommand(t *testing.T) {
-	var out bytes.Buffer
-	var errBuf bytes.Buffer
-
-	err := Run([]string{"unknown"}, &out, &errBuf)
-	if err == nil {
-		t.Fatal("expected error for unknown command")
-	}
-}
-
-func TestRunVersionSubcommandUnknown(t *testing.T) {
-	var out bytes.Buffer
-	var errBuf bytes.Buffer
-
-	err := Run([]string{"version"}, &out, &errBuf)
-	if err == nil {
-		t.Fatal("expected error for version subcommand")
+func TestUnknownCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"wat"}, os.Stdin, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("expected unknown command error, got %v", err)
 	}
 }

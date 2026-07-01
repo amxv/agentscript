@@ -1,55 +1,72 @@
 ---
 title: Command reference
-description: A compact map of the starter command and the files that usually change as the CLI grows.
-order: 4
+description: Commands and flags for opening, listing, searching, filtering, slicing, and exporting transcripts.
+order: 2
 category: Reference
-summary: Starter commands, make targets, and docs commands in one scannable page.
+summary: The complete command map for agentscript.
 ---
 
-## Starter command
+## Root
 
 ```bash
-mycli --help
-mycli hello
-mycli hello <name>
-mycli --version
+agentscript --help
+agentscript --version
 ```
 
-Replace these commands with behavior specific to your project.
-
-## Go development
+## Open
 
 ```bash
-make fmt
-make test
-make vet
-make lint
-make check
-make build
-make build-all
-make install-local
-make clean
+agentscript open [path] [flags]
+agentscript open --path <path> [flags]
+agentscript open --latest 1 [flags]
 ```
 
-## Docs development
+Common flags:
 
 ```bash
-bun run docs:dev
-bun run docs:check
-bun run docs:build
-bun run docs:preview
+--hide-thinking
+--hide-tools
+--hide-tool-results
+--hide-commands
+--messages-only
+--tools Bash,Edit
+--hide-tool Bash
+--timestamps
+--format text|md|json
+--out <file>
 ```
 
-## Main files
+## Slice
 
 ```bash
-cmd/mycli/main.go             # CLI entrypoint
-internal/app/app.go           # command parser and handlers
-internal/app/app_test.go      # starter tests
-internal/buildinfo/buildinfo.go # version plumbing
-bin/mycli.js                  # npm executable shim
-scripts/postinstall.js        # release binary installer
-.github/workflows/release.yml # release workflow
-src/content/docs/*.md         # docs content
-src/data/docs.ts              # docs site config
+agentscript slice <path> 0:100
+agentscript slice <path> 100:
+agentscript slice <path> :50
+```
+
+Equivalent `open` flags:
+
+```bash
+agentscript open transcript.jsonl --slice 0:100
+agentscript open transcript.jsonl --from 0 --to 100
+agentscript open transcript.jsonl --last 80
+agentscript open transcript.jsonl --around 100 --before 25 --after 50
+```
+
+## Search
+
+```bash
+agentscript search "publish-pr"
+agentscript search "r2 cors" --provider claude --latest 20
+agentscript search "git status" --provider codex
+```
+
+Each match includes the stable block index and an `open --around` command.
+
+## List
+
+```bash
+agentscript list --latest 50
+agentscript list --provider claude
+agentscript list --provider codex
 ```

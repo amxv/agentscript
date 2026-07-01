@@ -1,3 +1,3 @@
-module github.com/amxv/go-cli-template
+module github.com/amxv/agentscript
 
 go 1.26

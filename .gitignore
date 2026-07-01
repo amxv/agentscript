@@ -13,3 +13,6 @@ npm-debug.log*
 
 # Astro
 .astro/
+
+# Local reference clones
+/tmp/
