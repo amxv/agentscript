@@ -16,3 +16,4 @@ npm-debug.log*
 
 # Local reference clones
 /tmp/
+.vercel
