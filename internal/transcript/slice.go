@@ -78,3 +78,21 @@ func SliceBlocks(blocks []Block, spec SliceSpec, last, around, before, after int
 	}
 	return blocks[start:end]
 }
+
+func SliceBlocksByTurn(blocks []Block, spec SliceSpec) []Block {
+	start := 0
+	end := int(^uint(0) >> 1)
+	if spec.From != nil {
+		start = *spec.From
+	}
+	if spec.To != nil {
+		end = *spec.To
+	}
+	out := make([]Block, 0, len(blocks))
+	for _, b := range blocks {
+		if b.Turn >= start && b.Turn <= end {
+			out = append(out, b)
+		}
+	}
+	return out
+}

@@ -3,7 +3,7 @@ title: Quickstart
 description: Open Claude Code and Codex JSONL transcripts in a readable terminal format.
 order: 1
 category: Start
-summary: Install agentscript, open a transcript, and render clean block-indexed output.
+summary: Install agentscript, open a transcript, search sessions, slice context, and export output.
 ---
 
 ## Install
@@ -54,7 +54,20 @@ agentscript list --roots ./fixtures,~/Desktop/transcripts
 ```bash
 agentscript open transcript.jsonl --hide-thinking
 agentscript open transcript.jsonl --messages-only
-agentscript open transcript.jsonl --hide-tool-results
+agentscript open transcript.jsonl --profile compact
 ```
 
-Flags can appear before or after the transcript path.
+## Slice and export context
+
+```bash
+agentscript slice transcript.jsonl 0:100 --format md --out context.md
+agentscript export transcript.jsonl --format html --out transcript.html
+```
+
+## Inspect what happened
+
+```bash
+agentscript commands transcript.jsonl --failed --with-output
+agentscript changes transcript.jsonl
+agentscript activity transcript.jsonl
+```

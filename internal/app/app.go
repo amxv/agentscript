@@ -40,6 +40,20 @@ func Run(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 		return runList(args[1:], stdout)
 	case "search":
 		return runSearch(args[1:], stdout)
+	case "commands", "cmds":
+		return runCommands(args[1:], stdout)
+	case "files":
+		return runFiles(args[1:], stdout, false)
+	case "changes":
+		return runFiles(args[1:], stdout, true)
+	case "activity", "git", "pr":
+		return runActivity(args[1:], stdout)
+	case "export":
+		return runExport(args[1:], stdout)
+	case "split":
+		return runSplit(args[1:], stdout)
+	case "config":
+		return runConfig(args[1:], stdout)
 	default:
 		return fmt.Errorf("unknown command %q (run `%s --help`)", args[0], commandName)
 	}
@@ -48,50 +62,137 @@ func Run(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 type commonFlags struct {
 	format          string
 	out             string
+	profile         string
+	kinds           string
+	hideKinds       string
+	maxLines        int
+	expand          string
+	markdownStyle   string
 	hideThinking    bool
 	hideTools       bool
 	hideToolResults bool
 	hideCommands    bool
 	messagesOnly    bool
 	showTimestamps  bool
+	showTurns       bool
+	showThinking    bool
+	showTools       bool
+	showToolResults bool
+	showCommands    bool
 	tools           string
 	hideToolNames   string
 }
 
-func (c commonFlags) renderOptions() transcript.RenderOptions {
-	return transcript.RenderOptions{
-		Format:          c.format,
-		HideThinking:    c.hideThinking,
-		HideTools:       c.hideTools,
-		HideToolResults: c.hideToolResults,
-		HideCommands:    c.hideCommands,
-		MessagesOnly:    c.messagesOnly,
-		ShowTimestamps:  c.showTimestamps,
-		OnlyTools:       splitCSV(c.tools),
-		HideToolNames:   splitCSV(c.hideToolNames),
+func (c commonFlags) renderOptions() (transcript.RenderOptions, error) {
+	opts := transcript.RenderOptions{}
+	cfg, err := transcript.LoadConfig()
+	if err != nil {
+		return opts, err
 	}
+	opts, err = transcript.ApplyProfile(opts, cfg, c.profile)
+	if err != nil {
+		return opts, err
+	}
+	if c.format != "" {
+		opts.Format = c.format
+	}
+	if c.hideThinking {
+		opts.HideThinking = true
+	}
+	if c.showThinking {
+		opts.HideThinking = false
+	}
+	if c.hideTools {
+		opts.HideTools = true
+	}
+	if c.showTools {
+		opts.HideTools = false
+	}
+	if c.hideToolResults {
+		opts.HideToolResults = true
+	}
+	if c.showToolResults {
+		opts.HideToolResults = false
+	}
+	if c.hideCommands {
+		opts.HideCommands = true
+	}
+	if c.showCommands {
+		opts.HideCommands = false
+	}
+	if c.messagesOnly {
+		opts.MessagesOnly = true
+	}
+	if c.showTimestamps {
+		opts.ShowTimestamps = true
+	}
+	if c.showTurns {
+		opts.ShowTurns = true
+	}
+	if c.tools != "" {
+		opts.OnlyTools = splitCSV(c.tools)
+	}
+	if c.hideToolNames != "" {
+		opts.HideToolNames = splitCSV(c.hideToolNames)
+	}
+	if c.kinds != "" {
+		opts.OnlyKinds = transcript.ParseKinds(splitCSV(c.kinds))
+	}
+	if c.hideKinds != "" {
+		opts.HideKinds = transcript.ParseKinds(splitCSV(c.hideKinds))
+	}
+	if c.maxLines >= 0 {
+		opts.MaxLines = c.maxLines
+	}
+	if c.expand != "" {
+		if strings.EqualFold(c.expand, "all") {
+			opts.ExpandAll = true
+		} else {
+			idxs, err := parseIndexList(c.expand)
+			if err != nil {
+				return opts, err
+			}
+			opts.ExpandIndexes = idxs
+		}
+	}
+	if c.markdownStyle != "" {
+		opts.MarkdownStyle = c.markdownStyle
+	}
+	return opts, nil
 }
 
 func addCommonFlags(fs *flag.FlagSet, c *commonFlags) {
-	fs.StringVar(&c.format, "format", "text", "output format: text, md, json")
+	fs.StringVar(&c.format, "format", "", "output format: text, md, html, json")
 	fs.StringVar(&c.out, "out", "", "write output to file instead of stdout")
+	fs.StringVar(&c.profile, "profile", "", "render profile: full, compact, messages, handoff, debug, commands, tools, or config-defined")
+	fs.StringVar(&c.kinds, "kind", "", "only show comma-separated block kinds: user,assistant,thinking,tool_call,tool_result,command,command_result")
+	fs.StringVar(&c.hideKinds, "hide-kind", "", "hide comma-separated block kinds")
 	fs.BoolVar(&c.hideThinking, "hide-thinking", false, "hide thinking blocks")
+	fs.BoolVar(&c.showThinking, "show-thinking", false, "show thinking blocks, overriding profile/config")
 	fs.BoolVar(&c.hideThinking, "no-thinking", false, "alias for --hide-thinking")
 	fs.BoolVar(&c.hideTools, "hide-tools", false, "hide non-command tool calls and results")
+	fs.BoolVar(&c.showTools, "show-tools", false, "show non-command tool calls/results, overriding profile/config")
 	fs.BoolVar(&c.hideTools, "no-tools", false, "alias for --hide-tools")
 	fs.BoolVar(&c.hideToolResults, "hide-tool-results", false, "hide tool and command result blocks")
+	fs.BoolVar(&c.showToolResults, "show-tool-results", false, "show tool and command result blocks, overriding profile/config")
 	fs.BoolVar(&c.hideToolResults, "no-results", false, "alias for --hide-tool-results")
 	fs.BoolVar(&c.hideCommands, "hide-commands", false, "hide shell command blocks and their results")
+	fs.BoolVar(&c.showCommands, "show-commands", false, "show command blocks/results, overriding profile/config")
 	fs.BoolVar(&c.messagesOnly, "messages-only", false, "show only user and assistant messages")
 	fs.BoolVar(&c.showTimestamps, "timestamps", false, "show timestamps in block headers")
+	fs.BoolVar(&c.showTurns, "turns", false, "show user-turn numbers in block headers")
 	fs.StringVar(&c.tools, "tools", "", "only show tool/command blocks with these comma-separated names")
 	fs.StringVar(&c.hideToolNames, "hide-tool", "", "hide tool/command blocks with these comma-separated names")
+	fs.IntVar(&c.maxLines, "max-lines", -1, "collapse block bodies longer than N lines; use 0 to disable")
+	fs.StringVar(&c.expand, "expand", "", "expand collapsed block index list like 12,18 or all")
+	fs.StringVar(&c.markdownStyle, "md-style", "", "markdown style: compact, llm-context, audit")
 }
 
 func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 	var c commonFlags
 	var pathFlag string
 	var sliceSpec string
+	var turnSlice string
 	var latest int
 	var provider string
 	var roots string
@@ -104,6 +205,7 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 	fs.StringVar(&pathFlag, "path", "", "path to a Claude Code or Codex JSONL transcript")
 	fs.StringVar(&pathFlag, "p", "", "alias for --path")
 	fs.StringVar(&sliceSpec, "slice", "", "slice by stable block index, e.g. 0:100, 100:, :50")
+	fs.StringVar(&turnSlice, "turn-slice", "", "slice by user-turn number, e.g. 1:5")
 	fs.IntVar(&from, "from", -1, "slice start block index")
 	fs.IntVar(&to, "to", -1, "slice end block index, inclusive")
 	fs.IntVar(&last, "last", 0, "show the last N renderable blocks")
@@ -151,7 +253,7 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 			path = picked.Path
 		}
 	}
-	return renderPath(path, stdout, c, sliceSpec, from, to, last, around, before, after)
+	return renderPath(path, stdout, c, sliceSpec, turnSlice, from, to, last, around, before, after)
 }
 
 func runSlice(args []string, stdout io.Writer) error {
@@ -165,7 +267,7 @@ func runSlice(args []string, stdout io.Writer) error {
 		printSliceHelp(stdout)
 		return nil
 	}
-	return renderPath(fs.Arg(0), stdout, c, fs.Arg(1), -1, -1, 0, -1, 25, 50)
+	return renderPath(fs.Arg(0), stdout, c, fs.Arg(1), "", -1, -1, 0, -1, 25, 50)
 }
 
 func runList(args []string, stdout io.Writer) error {
@@ -192,13 +294,20 @@ func runList(args []string, stdout io.Writer) error {
 
 func runSearch(args []string, stdout io.Writer) error {
 	var c commonFlags
-	var latest int
-	var provider, roots string
+	var latest, near int
+	var provider, roots, kind, tool string
+	var regex, caseSensitive, all bool
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	addCommonFlags(fs, &c)
 	fs.IntVar(&latest, "latest", 100, "number of latest transcripts to search")
 	fs.StringVar(&provider, "provider", "", "provider filter: claude or codex")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery")
+	fs.StringVar(&kind, "search-kind", "", "only search comma-separated block kinds")
+	fs.StringVar(&tool, "tool", "", "only search comma-separated tool/command names")
+	fs.BoolVar(&regex, "regex", false, "treat queries as regular expressions")
+	fs.BoolVar(&caseSensitive, "case-sensitive", false, "case-sensitive search")
+	fs.BoolVar(&all, "all", false, "require all query args to match")
+	fs.IntVar(&near, "near", 0, "require all query args to appear within N blocks")
 	if err := fs.Parse(interspersed(args, searchValueFlags())); err != nil {
 		return err
 	}
@@ -206,12 +315,31 @@ func runSearch(args []string, stdout io.Writer) error {
 		printSearchHelp(stdout)
 		return nil
 	}
-	query := strings.Join(fs.Args(), " ")
+	queries := fs.Args()
 	sessions, err := transcript.Discover(latest, parseProvider(provider), splitCSV(roots))
 	if err != nil {
 		return err
 	}
-	matches, err := transcript.Search(query, sessions, c.renderOptions())
+	renderOpts, err := c.renderOptions()
+	if err != nil {
+		return err
+	}
+	mode := transcript.SearchAny
+	if all || near > 0 {
+		mode = transcript.SearchAll
+	}
+	searchKinds := transcript.ParseKinds(splitCSV(kind))
+	if kind == "" && len(renderOpts.OnlyKinds) > 0 {
+		searchKinds = renderOpts.OnlyKinds
+	}
+	searchTools := splitCSV(tool)
+	if tool == "" && len(renderOpts.OnlyTools) > 0 {
+		searchTools = renderOpts.OnlyTools
+	}
+	matches, err := transcript.SearchAdvanced(sessions, transcript.SearchOptions{
+		Queries: queries, Mode: mode, Near: near, Regex: regex, CaseSensitive: caseSensitive,
+		Kinds: searchKinds, Tools: searchTools, RenderOptions: renderOpts,
+	})
 	if err != nil {
 		return err
 	}
@@ -227,7 +355,7 @@ func runSearch(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func renderPath(path string, stdout io.Writer, c commonFlags, sliceSpec string, from, to, last, around, before, after int) error {
+func renderPath(path string, stdout io.Writer, c commonFlags, sliceSpec, turnSlice string, from, to, last, around, before, after int) error {
 	tr, err := transcript.ParseFile(path)
 	if err != nil {
 		return err
@@ -241,6 +369,13 @@ func renderPath(path string, stdout io.Writer, c commonFlags, sliceSpec string, 
 			right = strconv.Itoa(to)
 		}
 		sliceSpec = left + ":" + right
+	}
+	if turnSlice != "" {
+		spec, err := transcript.ParseSliceSpec(turnSlice)
+		if err != nil {
+			return err
+		}
+		tr.Blocks = transcript.SliceBlocksByTurn(tr.Blocks, spec)
 	}
 	if sliceSpec != "" || last > 0 || around >= 0 {
 		spec, err := transcript.ParseSliceSpec(sliceSpec)
@@ -263,7 +398,11 @@ func renderPath(path string, stdout io.Writer, c commonFlags, sliceSpec string, 
 		file = f
 		writer = file
 	}
-	return transcript.Render(writer, tr, c.renderOptions())
+	opts, err := c.renderOptions()
+	if err != nil {
+		return err
+	}
+	return transcript.Render(writer, tr, opts)
 }
 
 func pickSession(stdin *os.File, stdout io.Writer, sessions []transcript.Session) (transcript.Session, error) {
@@ -386,13 +525,13 @@ func formatTime(t time.Time) string {
 
 func commonValueFlags() map[string]bool {
 	return map[string]bool{
-		"format": true, "out": true, "tools": true, "hide-tool": true,
+		"format": true, "out": true, "tools": true, "hide-tool": true, "profile": true, "kind": true, "hide-kind": true, "max-lines": true, "expand": true, "md-style": true,
 	}
 }
 
 func openValueFlags() map[string]bool {
 	m := commonValueFlags()
-	for _, k := range []string{"path", "p", "slice", "from", "to", "last", "around", "before", "after", "latest", "provider", "roots"} {
+	for _, k := range []string{"path", "p", "slice", "turn-slice", "from", "to", "last", "around", "before", "after", "latest", "provider", "roots"} {
 		m[k] = true
 	}
 	return m
@@ -404,7 +543,7 @@ func listValueFlags() map[string]bool {
 
 func searchValueFlags() map[string]bool {
 	m := commonValueFlags()
-	for _, k := range []string{"latest", "provider", "roots"} {
+	for _, k := range []string{"latest", "provider", "roots", "search-kind", "tool", "near"} {
 		m[k] = true
 	}
 	return m
@@ -485,6 +624,13 @@ func printRootHelp(w io.Writer) {
 		"  slice <path> <range>  render a stable block-index slice like 0:100",
 		"  search <query>    search latest Claude/Codex transcripts",
 		"  list              list latest discovered transcripts",
+		"  commands          show shell commands and optional outputs",
+		"  files             show files referenced in a transcript",
+		"  changes           show files changed in a transcript",
+		"  activity          summarize Git/PR/push/test activity",
+		"  export            export a transcript to text, Markdown, JSON, or HTML",
+		"  split             split a transcript into multiple rendered files",
+		"  config            show or initialize agentscript config",
 		"",
 		"Examples:",
 		"  agentscript open ~/.claude/projects/.../session.jsonl",

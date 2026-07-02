@@ -2,7 +2,7 @@
 
 `agentscript` is a terminal-first transcript reader for Claude Code and Codex JSONL sessions.
 
-It turns local agent transcripts into readable, indexed blocks so you can search, inspect, hide noisy parts, and slice exactly the context you want to preserve.
+It turns local agent transcripts into readable, indexed blocks so you can search, inspect, hide noisy parts, slice exact context ranges, extract file and command activity, and export handoff-ready Markdown or HTML.
 
 ## Install
 
@@ -18,7 +18,7 @@ make build
 ./dist/agentscript --help
 ```
 
-## Core workflow
+## Open transcripts
 
 Open a transcript by path:
 
@@ -27,10 +27,11 @@ agentscript open ~/.claude/projects/<project>/<session>.jsonl
 agentscript open ~/.codex/sessions/<year>/<month>/<day>/<session>.jsonl
 ```
 
-Or open the latest transcript discovered under the default roots:
+Open a recent transcript:
 
 ```bash
 agentscript open --latest 1
+agentscript list --latest 20
 ```
 
 Run `agentscript open` with no path to launch the latest-transcript picker. The picker searches:
@@ -40,7 +41,7 @@ Run `agentscript open` with no path to launch the latest-transcript picker. The 
 ~/.codex/sessions
 ```
 
-## Readable block indexes
+## Stable block indexes and turns
 
 Every renderable block gets a stable index:
 
@@ -56,6 +57,58 @@ Every renderable block gets a stable index:
 
 Hidden blocks keep their original indexes, so slices remain stable even when you hide thinking or tool output.
 
+Show user-turn numbers too:
+
+```bash
+agentscript open transcript.jsonl --turns
+```
+
+Slice by turn:
+
+```bash
+agentscript open transcript.jsonl --turn-slice 2:4
+```
+
+## Filtering, profiles, and folding
+
+```bash
+agentscript open transcript.jsonl --hide-thinking
+agentscript open transcript.jsonl --messages-only
+agentscript open transcript.jsonl --hide-tool-results
+agentscript open transcript.jsonl --hide-commands
+agentscript open transcript.jsonl --kind user,assistant,command
+agentscript open transcript.jsonl --hide-kind thinking,tool_result
+agentscript open transcript.jsonl --tools Bash,Edit
+agentscript open transcript.jsonl --hide-tool Bash
+```
+
+Use built-in profiles:
+
+```bash
+agentscript open transcript.jsonl --profile compact
+agentscript open transcript.jsonl --profile handoff
+agentscript open transcript.jsonl --profile debug
+agentscript open transcript.jsonl --profile commands
+```
+
+Collapse long blocks:
+
+```bash
+agentscript open transcript.jsonl --max-lines 40
+```
+
+Collapsed output includes an exact expand command:
+
+```bash
+agentscript open "transcript.jsonl" --around 120 --expand 120
+```
+
+Expand all collapsed blocks:
+
+```bash
+agentscript open transcript.jsonl --max-lines 40 --expand all
+```
+
 ## Slicing
 
 Preserve the first 100 blocks of context:
@@ -70,58 +123,97 @@ Render from block 100 to the end:
 agentscript slice transcript.jsonl 100:
 ```
 
-Show the last 80 renderable blocks:
-
-```bash
-agentscript open transcript.jsonl --last 80
-```
-
-Show context around a specific block:
+Show context around a block:
 
 ```bash
 agentscript open transcript.jsonl --around 100 --before 25 --after 50
 ```
 
-## Filtering and toggles
+Split a transcript into rendered files:
 
 ```bash
-agentscript open transcript.jsonl --hide-thinking
-agentscript open transcript.jsonl --hide-tools
-agentscript open transcript.jsonl --hide-tool-results
-agentscript open transcript.jsonl --hide-commands
-agentscript open transcript.jsonl --messages-only
-agentscript open transcript.jsonl --hide-tool Bash
-agentscript open transcript.jsonl --tools Bash,Edit
+agentscript split transcript.jsonl --at 100 --out-dir parts --format md
+agentscript split transcript.jsonl --every 80 --out-dir parts --format html
 ```
-
-Flags can appear before or after the transcript path.
 
 ## Search
 
-Search recent transcripts:
+Basic search:
 
 ```bash
 agentscript search "publish-pr"
 agentscript search "r2 cors" --provider claude --latest 20
-agentscript search "git status" --provider codex
+```
+
+Advanced search:
+
+```bash
+agentscript search push rejected --all --near 20
+agentscript search "git (push|pull)" --regex --tool Bash
+agentscript search permission --search-kind command_result
+agentscript search YOLO --case-sensitive
 ```
 
 Each result includes the matching block index and an `agentscript open ... --around <index>` command.
 
-## List discovered transcripts
+## Command, file, and activity views
+
+Show shell commands:
 
 ```bash
-agentscript list --latest 20
-agentscript list --provider codex
+agentscript commands transcript.jsonl
+agentscript commands transcript.jsonl --failed --with-output
+agentscript commands transcript.jsonl --grep "go test"
 ```
 
-## Output formats
+Show files referenced or changed:
 
 ```bash
-agentscript open transcript.jsonl --format text
-agentscript open transcript.jsonl --format md --out transcript.md
-agentscript open transcript.jsonl --format json --out normalized.json
+agentscript files transcript.jsonl
+agentscript changes transcript.jsonl
 ```
+
+Summarize Git, PR, push, validation, and failure activity:
+
+```bash
+agentscript activity transcript.jsonl
+agentscript activity transcript.jsonl --format json
+```
+
+`git` and `pr` are aliases for `activity`.
+
+## Export
+
+```bash
+agentscript export transcript.jsonl --format html --out transcript.html
+agentscript export transcript.jsonl --format md --md-style llm-context --slice 0:100 --out context.md
+agentscript export transcript.jsonl --format json --out normalized.json
+```
+
+Markdown styles:
+
+```bash
+--md-style compact
+--md-style llm-context
+--md-style audit
+```
+
+## Config
+
+Show the active config and built-in profiles:
+
+```bash
+agentscript config show
+agentscript config path
+```
+
+Create a starter config:
+
+```bash
+agentscript config init
+```
+
+The config supports custom profiles with different block sets, hidden kinds, tool filters, max line folding, output format, and Markdown style.
 
 ## Development
 

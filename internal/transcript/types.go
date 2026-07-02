@@ -25,6 +25,7 @@ const (
 
 type Block struct {
 	Index     int             `json:"index"`
+	Turn      int             `json:"turn,omitempty"`
 	Provider  Provider        `json:"provider"`
 	Kind      Kind            `json:"kind"`
 	Role      string          `json:"role,omitempty"`
@@ -52,8 +53,15 @@ type RenderOptions struct {
 	MessagesOnly    bool
 	ShowTimestamps  bool
 	ShowRawInput    bool
+	ShowTurns       bool
 	OnlyTools       []string
 	HideToolNames   []string
+	OnlyKinds       []Kind
+	HideKinds       []Kind
+	MaxLines        int
+	ExpandIndexes   []int
+	ExpandAll       bool
+	MarkdownStyle   string
 }
 
 func (o RenderOptions) normalizedFormat() string {

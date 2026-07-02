@@ -1,9 +1,9 @@
 ---
 title: Transcript model
-description: Understand how agentscript normalizes Claude Code and Codex JSONL into stable renderable blocks.
+description: Understand how agentscript normalizes Claude Code and Codex JSONL into stable renderable blocks and turns.
 order: 3
 category: Workflows
-summary: How block indexes, filtering, and slicing work.
+summary: How block indexes, turn indexes, filtering, folding, and slicing work.
 ---
 
 ## Stable blocks
@@ -22,31 +22,55 @@ agentscript parses Claude Code and Codex sessions into one stream of renderable 
 
 Indexes are assigned before filtering. This means `--hide-thinking` may show gaps, but the visible blocks still keep their original indexes.
 
-## Why this matters
+## Turns
 
-Stable indexes make long transcript surgery easy. For example, if a session changed tasks around block 100, preserve the earlier context with:
+A turn starts at each user message. Use `--turns` to display turn numbers:
 
 ```bash
-agentscript slice transcript.jsonl 0:100 --format md --out old-context.md
+agentscript open transcript.jsonl --turns
 ```
 
-Then inspect the new task separately:
+Then slice by turn:
 
 ```bash
-agentscript slice transcript.jsonl 100:
+agentscript open transcript.jsonl --turn-slice 4:7
 ```
 
-## Commands and tools
+Block indexes remain the primary addressing system; turn indexes are a convenience for conversation-level ranges.
 
-Shell commands are separated from generic tool calls so they can be hidden independently:
+## Folding and expansion
+
+Collapse long blocks with:
 
 ```bash
-agentscript open transcript.jsonl --hide-commands
-agentscript open transcript.jsonl --hide-tools
+agentscript open transcript.jsonl --max-lines 40
 ```
 
-Tool and command results can be hidden while keeping the calls visible:
+Collapsed blocks include an exact expansion command:
 
 ```bash
-agentscript open transcript.jsonl --hide-tool-results
+agentscript open "transcript.jsonl" --around 120 --expand 120
+```
+
+Expand everything with:
+
+```bash
+agentscript open transcript.jsonl --max-lines 40 --expand all
+```
+
+## Profiles
+
+Built-in profiles are shortcuts for common block sets:
+
+```bash
+agentscript open transcript.jsonl --profile compact
+agentscript open transcript.jsonl --profile handoff
+agentscript open transcript.jsonl --profile commands
+agentscript open transcript.jsonl --profile tools
+```
+
+Custom profiles can be added to the config file shown by:
+
+```bash
+agentscript config path
 ```

@@ -71,12 +71,17 @@ func Parse(data []byte) (Transcript, error) {
 
 func finish(provider Provider, blocks []Block) Transcript {
 	out := make([]Block, 0, len(blocks))
+	turn := 0
 	for _, b := range blocks {
 		if strings.TrimSpace(b.Text) == "" && b.Kind != KindToolCall && b.Kind != KindCommand {
 			continue
 		}
+		if b.Kind == KindUser {
+			turn++
+		}
 		b.Provider = provider
 		b.Index = len(out)
+		b.Turn = turn
 		out = append(out, b)
 	}
 	return Transcript{Provider: provider, Blocks: out}

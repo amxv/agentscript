@@ -34,11 +34,24 @@ mkdir -p tmp
 git clone https://github.com/es617/claude-replay.git tmp/claude-replay
 ```
 
-The Go parser code lives in:
+The Go parser and transcript features live in:
 
 ```bash
-internal/transcript/parser.go
-internal/transcript/render.go
-internal/transcript/search.go
-internal/transcript/slice.go
+internal/transcript/parser.go      # Claude/Codex parsers
+internal/transcript/render.go      # text, Markdown, JSON, HTML rendering + folding
+internal/transcript/search.go      # advanced search
+internal/transcript/analysis.go    # commands, files, changes, activity
+internal/transcript/config.go      # built-in and user profiles
+internal/transcript/slice.go       # block and turn slicing
 ```
+
+## CLI handlers
+
+Command parsing lives in:
+
+```bash
+internal/app/app.go
+internal/app/extra.go
+```
+
+Keep non-interactive flags first-class. Any TUI or picker behavior should have an equivalent flag-based workflow.

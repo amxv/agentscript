@@ -28,7 +28,7 @@ const workflows = [
   "Open a transcript by path or jump straight to the latest Claude/Codex session.",
   "Hide thinking, tools, command output, or results without changing original block indexes.",
   "Slice long transcripts like 0:100 or 100: and export the result to Markdown.",
-  "Search recent transcripts and jump back into the matching block with open --around."
+  "Search recent transcripts, extract command/file/activity timelines, and jump back into the matching block with open --around."
 ];
 ---
 
@@ -41,10 +41,10 @@ const workflows = [
   <section class="hero shell">
     <div class="hero__copy">
       <p class="section-label">Transcript CLI</p>
-      <h1>Search, read, and slice Claude Code and Codex sessions from your terminal.</h1>
+      <h1>Search, read, slice, split, and audit Claude Code and Codex sessions from your terminal.</h1>
       <p class="hero__lede">
         agentscript turns JSONL agent transcripts into readable indexed blocks so you can
-        preserve context, inspect tool calls, hide noise, and export exactly the range you need.
+        preserve context, inspect commands and files, hide noise, summarize activity, and export exactly the range you need.
       </p>
       <p class="hero__annotation">
         Built for long coding-agent sessions where you need fast transcript navigation without opening a browser.
@@ -105,7 +105,7 @@ const workflows = [
   <section class="shell docs-teaser">
     <div class="section-heading">
       <p class="section-label">Docs map</p>
-      <h2>Learn the open, search, slice, and export workflows.</h2>
+      <h2>Learn the open, search, slice, split, inspect, and export workflows.</h2>
     </div>
     <div class="docs-teaser__grid">
       {docs.map((entry) => (
