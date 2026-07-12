@@ -5,9 +5,15 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"regexp"
 	"sort"
 	"strings"
 )
+
+var internalGoalPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?is)<codex_internal_goal\b[^>]*>.*?</codex_internal_goal\s*>\s*`),
+	regexp.MustCompile(`(?is)<codex_internal_context\b[^>]*\bsource\s*=\s*["']goal["'][^>]*>.*?</codex_internal_context\s*>\s*`),
+}
 
 func Render(w io.Writer, tr Transcript, opts RenderOptions) error {
 	blocks := FilterBlocks(tr.Blocks, opts)
@@ -64,9 +70,22 @@ func FilterBlocks(blocks []Block, opts RenderOptions) []Block {
 		if len(opts.HideToolNames) > 0 && isToolish(b.Kind) && nameInList(b.ToolName, opts.HideToolNames) {
 			continue
 		}
+		if !opts.ShowInternalGoal && b.Text != "" {
+			b.Text = stripInternalGoalBlocks(b.Text)
+			if strings.TrimSpace(b.Text) == "" && b.Kind != KindToolCall && b.Kind != KindCommand {
+				continue
+			}
+		}
 		out = append(out, b)
 	}
 	return out
+}
+
+func stripInternalGoalBlocks(text string) string {
+	for _, pattern := range internalGoalPatterns {
+		text = pattern.ReplaceAllString(text, "")
+	}
+	return strings.TrimSpace(text)
 }
 
 func renderText(w io.Writer, tr Transcript, blocks []Block, opts RenderOptions) {

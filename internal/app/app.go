@@ -60,27 +60,28 @@ func Run(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 }
 
 type commonFlags struct {
-	format          string
-	out             string
-	profile         string
-	kinds           string
-	hideKinds       string
-	maxLines        int
-	expand          string
-	markdownStyle   string
-	hideThinking    bool
-	hideTools       bool
-	hideToolResults bool
-	hideCommands    bool
-	messagesOnly    bool
-	showTimestamps  bool
-	showTurns       bool
-	showThinking    bool
-	showTools       bool
-	showToolResults bool
-	showCommands    bool
-	tools           string
-	hideToolNames   string
+	format           string
+	out              string
+	profile          string
+	kinds            string
+	hideKinds        string
+	maxLines         int
+	expand           string
+	markdownStyle    string
+	hideThinking     bool
+	hideTools        bool
+	hideToolResults  bool
+	hideCommands     bool
+	messagesOnly     bool
+	showTimestamps   bool
+	showTurns        bool
+	showInternalGoal bool
+	showThinking     bool
+	showTools        bool
+	showToolResults  bool
+	showCommands     bool
+	tools            string
+	hideToolNames    string
 }
 
 func (c commonFlags) renderOptions() (transcript.RenderOptions, error) {
@@ -128,6 +129,9 @@ func (c commonFlags) renderOptions() (transcript.RenderOptions, error) {
 	}
 	if c.showTurns {
 		opts.ShowTurns = true
+	}
+	if c.showInternalGoal {
+		opts.ShowInternalGoal = true
 	}
 	if c.tools != "" {
 		opts.OnlyTools = splitCSV(c.tools)
@@ -181,6 +185,7 @@ func addCommonFlags(fs *flag.FlagSet, c *commonFlags) {
 	fs.BoolVar(&c.messagesOnly, "messages-only", false, "show only user and assistant messages")
 	fs.BoolVar(&c.showTimestamps, "timestamps", false, "show timestamps in block headers")
 	fs.BoolVar(&c.showTurns, "turns", false, "show user-turn numbers in block headers")
+	fs.BoolVar(&c.showInternalGoal, "show-internal-goal", false, "show Codex internal goal/context blocks")
 	fs.StringVar(&c.tools, "tools", "", "only show tool/command blocks with these comma-separated names")
 	fs.StringVar(&c.hideToolNames, "hide-tool", "", "hide tool/command blocks with these comma-separated names")
 	fs.IntVar(&c.maxLines, "max-lines", -1, "collapse block bodies longer than N lines; use 0 to disable")
@@ -657,6 +662,7 @@ func printOpenHelp(w io.Writer) {
 		"  --last 80              render the last 80 blocks",
 		"  --around 100           render around block #100",
 		"  --hide-thinking        hide thinking blocks",
+		"  --show-internal-goal   show Codex internal goal/context blocks",
 		"  --hide-tools           hide non-command tool calls/results",
 		"  --hide-commands        hide shell commands/results",
 		"  --hide-tool Bash       hide a named tool/command",

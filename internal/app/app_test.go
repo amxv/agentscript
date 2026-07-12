@@ -37,3 +37,13 @@ func TestUnknownCommand(t *testing.T) {
 		t.Fatalf("expected unknown command error, got %v", err)
 	}
 }
+
+func TestOpenHelpIncludesInternalGoalFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"open", "help"}, os.Stdin, &stdout, &stderr); err != nil {
+		t.Fatalf("Run open help: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "--show-internal-goal") {
+		t.Fatalf("open help missing --show-internal-goal:\n%s", stdout.String())
+	}
+}

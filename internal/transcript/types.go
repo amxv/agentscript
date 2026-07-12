@@ -45,23 +45,24 @@ type Transcript struct {
 }
 
 type RenderOptions struct {
-	Format          string
-	HideThinking    bool
-	HideTools       bool
-	HideToolResults bool
-	HideCommands    bool
-	MessagesOnly    bool
-	ShowTimestamps  bool
-	ShowRawInput    bool
-	ShowTurns       bool
-	OnlyTools       []string
-	HideToolNames   []string
-	OnlyKinds       []Kind
-	HideKinds       []Kind
-	MaxLines        int
-	ExpandIndexes   []int
-	ExpandAll       bool
-	MarkdownStyle   string
+	Format           string
+	HideThinking     bool
+	HideTools        bool
+	HideToolResults  bool
+	HideCommands     bool
+	MessagesOnly     bool
+	ShowTimestamps   bool
+	ShowRawInput     bool
+	ShowTurns        bool
+	ShowInternalGoal bool
+	OnlyTools        []string
+	HideToolNames    []string
+	OnlyKinds        []Kind
+	HideKinds        []Kind
+	MaxLines         int
+	ExpandIndexes    []int
+	ExpandAll        bool
+	MarkdownStyle    string
 }
 
 func (o RenderOptions) normalizedFormat() string {

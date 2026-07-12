@@ -73,6 +73,7 @@ agentscript open transcript.jsonl --turn-slice 2:4
 
 ```bash
 agentscript open transcript.jsonl --hide-thinking
+agentscript open transcript.jsonl --show-internal-goal
 agentscript open transcript.jsonl --messages-only
 agentscript open transcript.jsonl --hide-tool-results
 agentscript open transcript.jsonl --hide-commands

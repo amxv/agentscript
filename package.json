@@ -1,6 +1,6 @@
 {
   "name": "@amxv/agentscript",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Readable Claude Code and Codex JSONL transcript searcher, renderer, and slicer",
   "license": "MIT",
   "author": "amxv",
