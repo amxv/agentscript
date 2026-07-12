@@ -76,6 +76,7 @@ type commonFlags struct {
 	showTimestamps   bool
 	showTurns        bool
 	showInternalGoal bool
+	showInternal     bool
 	showThinking     bool
 	showTools        bool
 	showToolResults  bool
@@ -133,6 +134,10 @@ func (c commonFlags) renderOptions() (transcript.RenderOptions, error) {
 	if c.showInternalGoal {
 		opts.ShowInternalGoal = true
 	}
+	if c.showInternal {
+		opts.ShowInternal = true
+		opts.ShowInternalGoal = true
+	}
 	if c.tools != "" {
 		opts.OnlyTools = splitCSV(c.tools)
 	}
@@ -186,6 +191,7 @@ func addCommonFlags(fs *flag.FlagSet, c *commonFlags) {
 	fs.BoolVar(&c.showTimestamps, "timestamps", false, "show timestamps in block headers")
 	fs.BoolVar(&c.showTurns, "turns", false, "show user-turn numbers in block headers")
 	fs.BoolVar(&c.showInternalGoal, "show-internal-goal", false, "show Codex internal goal/context blocks")
+	fs.BoolVar(&c.showInternal, "show-internal", false, "show injected runtime instructions and context")
 	fs.StringVar(&c.tools, "tools", "", "only show tool/command blocks with these comma-separated names")
 	fs.StringVar(&c.hideToolNames, "hide-tool", "", "hide tool/command blocks with these comma-separated names")
 	fs.IntVar(&c.maxLines, "max-lines", -1, "collapse block bodies longer than N lines; use 0 to disable")
@@ -663,6 +669,7 @@ func printOpenHelp(w io.Writer) {
 		"  --around 100           render around block #100",
 		"  --hide-thinking        hide thinking blocks",
 		"  --show-internal-goal   show Codex internal goal/context blocks",
+		"  --show-internal        show all injected runtime instructions/context",
 		"  --hide-tools           hide non-command tool calls/results",
 		"  --hide-commands        hide shell commands/results",
 		"  --hide-tool Bash       hide a named tool/command",

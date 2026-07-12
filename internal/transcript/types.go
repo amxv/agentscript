@@ -55,6 +55,7 @@ type RenderOptions struct {
 	ShowRawInput     bool
 	ShowTurns        bool
 	ShowInternalGoal bool
+	ShowInternal     bool
 	OnlyTools        []string
 	HideToolNames    []string
 	OnlyKinds        []Kind

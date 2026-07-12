@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 type jsonLine struct {
@@ -73,6 +73,9 @@ func finish(provider Provider, blocks []Block) Transcript {
 	out := make([]Block, 0, len(blocks))
 	turn := 0
 	for _, b := range blocks {
+		if provider == ProviderCodex && len(out) > 0 && duplicateCodexUserTransport(out[len(out)-1], b) {
+			continue
+		}
 		if strings.TrimSpace(b.Text) == "" && b.Kind != KindToolCall && b.Kind != KindCommand {
 			continue
 		}
@@ -85,6 +88,37 @@ func finish(provider Provider, blocks []Block) Transcript {
 		out = append(out, b)
 	}
 	return Transcript{Provider: provider, Blocks: out}
+}
+
+func duplicateCodexUserTransport(previous, current Block) bool {
+	if previous.Kind != KindUser || current.Kind != KindUser {
+		return false
+	}
+	if compactWhitespace(previous.Text) != compactWhitespace(current.Text) {
+		return false
+	}
+	a, b := rawEntryType(previous.Raw), rawEntryType(current.Raw)
+	if (a == "event_msg" && b == "response_item") || (a == "response_item" && b == "event_msg") {
+		return true
+	}
+	return previous.Timestamp != "" && previous.Timestamp == current.Timestamp
+}
+
+func compactWhitespace(text string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, text)
+}
+
+func rawEntryType(raw json.RawMessage) string {
+	var envelope struct {
+		Type string `json:"type"`
+	}
+	_ = json.Unmarshal(raw, &envelope)
+	return envelope.Type
 }
 
 func Detect(data []byte) Provider {
@@ -140,7 +174,7 @@ func parseClaude(data []byte) ([]Block, error) {
 		case "user":
 			c := entry.Message.Content
 			if isJSONString(c) {
-				text := cleanSystemTags(readJSONString(c))
+				text := strings.TrimSpace(readJSONString(c))
 				if text != "" {
 					blocks = append(blocks, Block{Kind: KindUser, Role: "user", Text: text, Timestamp: entry.Timestamp, Raw: entry.Raw})
 				}
@@ -165,7 +199,7 @@ func parseClaude(data []byte) ([]Block, error) {
 				}
 			}
 			if len(textParts) > 0 {
-				text := cleanSystemTags(strings.Join(textParts, "\n"))
+				text := strings.TrimSpace(strings.Join(textParts, "\n"))
 				if text != "" {
 					blocks = append(blocks, Block{Kind: KindUser, Role: "user", Text: text, Timestamp: entry.Timestamp, Raw: entry.Raw})
 				}
@@ -600,32 +634,6 @@ func cleanCodexOutput(output string) string {
 		kept = append(kept, line)
 	}
 	return strings.TrimSpace(strings.Join(kept, "\n"))
-}
-
-func cleanSystemTags(text string) string {
-	replacements := []struct{ re, repl string }{
-		{`(?s)<task-notification>\s*<task-id>[^<]*</task-id>\s*<output-file>[^<]*</output-file>\s*<status>([^<]*)</status>\s*<summary>([^<]*)</summary>\s*</task-notification>`, `[bg-task: $2]`},
-		{`(?m)\n*Read the output file to retrieve the result:[^\n]*`, ``},
-		{`(?s)<user_query>(.*?)</user_query>\s*`, `$1`},
-		{`(?s)<system-reminder>.*?</system-reminder>\s*`, ``},
-		{`(?s)<ide_opened_file>.*?</ide_opened_file>\s*`, ``},
-		{`(?s)<local-command-caveat>.*?</local-command-caveat>\s*`, ``},
-		{`(?s)<command-name>(.*?)</command-name>\s*`, `$1\n`},
-		{`(?s)<command-message>.*?</command-message>\s*`, ``},
-		{`(?s)<command-args>\s*</command-args>\s*`, ``},
-		{`(?s)<local-command-stdout>.*?</local-command-stdout>\s*`, ``},
-	}
-	for _, r := range replacements {
-		text = regexp.MustCompile(r.re).ReplaceAllString(text, r.repl)
-	}
-	text = regexp.MustCompile(`(?s)<command-args>(.*?)</command-args>\s*`).ReplaceAllStringFunc(text, func(s string) string {
-		matches := regexp.MustCompile(`(?s)<command-args>(.*?)</command-args>`).FindStringSubmatch(s)
-		if len(matches) < 2 || strings.TrimSpace(matches[1]) == "" {
-			return ""
-		}
-		return strings.TrimSpace(matches[1]) + "\n"
-	})
-	return strings.TrimSpace(text)
 }
 
 func stringValue(v any) string {

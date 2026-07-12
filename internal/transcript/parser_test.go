@@ -63,3 +63,47 @@ func TestSliceBlocksKeepsOriginalIndexes(t *testing.T) {
 		t.Fatalf("unexpected slice: %#v", got)
 	}
 }
+
+func TestFinishDeduplicatesCodexTransportCopies(t *testing.T) {
+	eventRaw := []byte(`{"type":"event_msg"}`)
+	responseRaw := []byte(`{"type":"response_item"}`)
+	blocks := []Block{
+		{Kind: KindUser, Text: "same\nmessage", Raw: eventRaw},
+		{Kind: KindUser, Text: "same message", Raw: responseRaw},
+		{Kind: KindThinking, Text: "preserved thinking"},
+	}
+
+	tr := finish(ProviderCodex, blocks)
+	if len(tr.Blocks) != 2 || tr.Blocks[0].Text != "same\nmessage" || tr.Blocks[1].Kind != KindThinking {
+		t.Fatalf("unexpected deduplicated transcript: %#v", tr.Blocks)
+	}
+}
+
+func TestFinishDeduplicatesSameTimestampCodexCopies(t *testing.T) {
+	raw := []byte(`{"type":"response_item"}`)
+	blocks := []Block{
+		{Kind: KindUser, Text: `<team_msg sender="agent">same message</team_msg>`, Timestamp: "2026-07-12T01:00:00.000Z", Raw: raw},
+		{Kind: KindUser, Text: "<team_msg sender=\"agent\">\nsame message\n</team_msg>", Timestamp: "2026-07-12T01:00:00.000Z", Raw: raw},
+	}
+
+	tr := finish(ProviderCodex, blocks)
+	if len(tr.Blocks) != 1 {
+		t.Fatalf("got %d blocks, want one semantic team message: %#v", len(tr.Blocks), tr.Blocks)
+	}
+}
+
+func TestParseClaudePreservesSemanticWrappers(t *testing.T) {
+	data := []byte(`{"type":"user","message":{"role":"user","content":"<user_query>hello</user_query>\\n<task-notification>done</task-notification>\\n<command-name>/test</command-name>"}}`)
+	tr, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(tr.Blocks) != 1 {
+		t.Fatalf("got %d blocks, want 1", len(tr.Blocks))
+	}
+	for _, want := range []string{"<user_query>", "<task-notification>", "<command-name>"} {
+		if !strings.Contains(tr.Blocks[0].Text, want) {
+			t.Fatalf("wrapper %q was not preserved: %q", want, tr.Blocks[0].Text)
+		}
+	}
+}
