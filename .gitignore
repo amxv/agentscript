@@ -16,4 +16,5 @@ npm-debug.log*
 
 # Local reference clones
 /tmp/
+/.agents/gg/queue.md
 .vercel
