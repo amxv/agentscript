@@ -4,6 +4,8 @@ export const siteConfig = {
   description:
     "Documentation for agentscript, a Go CLI for opening, searching, filtering, slicing, splitting, exporting, and auditing Claude Code and Codex JSONL transcripts.",
   repoUrl: "https://github.com/amxv/agentscript",
+  accentColor: "#6d28d9",
+  accentColorDark: "#c4b5fd",
   footerSections: [
     {
       title: "agentscript",
@@ -31,7 +33,6 @@ export const docCategories = [
 ] as const;
 
 export const primaryNav = [
-  { href: "/", label: "Overview" },
   { href: "/docs", label: "Docs" },
   { href: siteConfig.repoUrl, label: "GitHub", external: true }
 ];
