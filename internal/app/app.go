@@ -33,7 +33,9 @@ func Run(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 
 	switch args[0] {
 	case "open":
-		return runOpen(args[1:], stdin, stdout, stderr)
+		return runOpen(args[1:], stdin, stdout, stderr, false)
+	case "codex":
+		return runOpen(args[1:], stdin, stdout, stderr, true)
 	case "slice":
 		return runSlice(args[1:], stdout)
 	case "list", "ls":
@@ -199,7 +201,16 @@ func addCommonFlags(fs *flag.FlagSet, c *commonFlags) {
 	fs.StringVar(&c.markdownStyle, "md-style", "", "markdown style: compact, llm-context, audit")
 }
 
-func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer) error {
+func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSession bool) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		if codexSession {
+			printCodexHelp(stdout)
+		} else {
+			printOpenHelp(stdout)
+		}
+		return nil
+	}
+
 	var c commonFlags
 	var pathFlag string
 	var sliceSpec string
@@ -225,18 +236,33 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 	fs.IntVar(&after, "after", 50, "number of blocks after --around")
 	fs.IntVar(&latest, "latest", 0, "open the Nth latest transcript; 1 is most recent")
 	fs.StringVar(&provider, "provider", "", "provider filter for latest/picker: claude or codex")
-	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery; defaults to ~/.claude/projects,~/.codex/sessions")
+	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery and session ID lookup")
 	fs.BoolVar(&noTUI, "no-tui", false, "do not launch the picker when no path is provided")
 	if err := fs.Parse(interspersed(args, openValueFlags())); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 && isHelpArg(fs.Arg(0)) {
-		printOpenHelp(stdout)
+		if codexSession {
+			printCodexHelp(stdout)
+		} else {
+			printOpenHelp(stdout)
+		}
 		return nil
 	}
 	path := pathFlag
 	if fs.NArg() > 0 {
 		path = fs.Arg(0)
+	}
+	if codexSession {
+		if path == "" {
+			printCodexHelp(stdout)
+			return nil
+		}
+		resolved, err := transcript.ResolveCodexSessionID(path, splitCSV(roots))
+		if err != nil {
+			return err
+		}
+		path = resolved
 	}
 	if path == "" {
 		sessions, err := transcript.Discover(80, parseProvider(provider), splitCSV(roots))
@@ -632,6 +658,7 @@ func printRootHelp(w io.Writer) {
 		"",
 		"Commands:",
 		"  open [path]       open/render a transcript, or pick from latest sessions",
+		"  codex <session-id>  open/render a Codex transcript by session ID",
 		"  slice <path> <range>  render a stable block-index slice like 0:100",
 		"  search <query>    search latest Claude/Codex transcripts",
 		"  list              list latest discovered transcripts",
@@ -646,6 +673,7 @@ func printRootHelp(w io.Writer) {
 		"Examples:",
 		"  agentscript open ~/.claude/projects/.../session.jsonl",
 		"  agentscript open --path ~/.codex/sessions/.../rollout.jsonl --hide-thinking",
+		"  agentscript codex 019f91bc-123f-7692-8a78-21e54d6677e6",
 		"  agentscript open transcript.jsonl --slice 0:100 --out context.md --format md",
 		"  agentscript slice transcript.jsonl 100: --messages-only",
 		"  agentscript search \"publish-pr\" --provider codex",
@@ -676,6 +704,27 @@ func printOpenHelp(w io.Writer) {
 		"  --messages-only        show only user/assistant messages",
 		"  --format text|md|json  output format",
 		"  --out file             write output to file",
+	)
+}
+
+func printCodexHelp(w io.Writer) {
+	writeLines(w,
+		"agentscript codex - open or render a Codex transcript by session ID",
+		"",
+		"Usage:",
+		"  agentscript codex <session-id> [flags]",
+		"",
+		"Session lookup:",
+		"  Uses $CODEX_HOME/sessions when it exists.",
+		"  Falls back to ~/.codex/sessions.",
+		"  Override lookup with --roots <path>.",
+		"",
+		"Examples:",
+		"  agentscript codex 019f91bc-123f-7692-8a78-21e54d6677e6",
+		"  agentscript codex 019f91bc-123f-7692-8a78-21e54d6677e6 --last 80",
+		"  agentscript codex 019f91bc-123f-7692-8a78-21e54d6677e6 --roots /custom/sessions",
+		"",
+		"Rendering flags are the same as `agentscript open`.",
 	)
 }
 

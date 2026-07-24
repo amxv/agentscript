@@ -27,6 +27,12 @@ agentscript open ~/.claude/projects/<project>/<session>.jsonl
 agentscript open ~/.codex/sessions/<year>/<month>/<day>/<session>.jsonl
 ```
 
+Open a Codex transcript by session ID:
+
+```bash
+agentscript codex 019f91bc-123f-7692-8a78-21e54d6677e6
+```
+
 Open a recent transcript:
 
 ```bash
@@ -34,7 +40,7 @@ agentscript open --latest 1
 agentscript list --latest 20
 ```
 
-Run `agentscript open` with no path to launch the latest-transcript picker. The picker searches:
+Run `agentscript open` with no path to launch the latest-transcript picker. Discovery uses `$CLAUDE_CONFIG_DIR/projects` and `$CODEX_HOME/sessions` when those directories exist. Otherwise, it falls back to:
 
 ```bash
 ~/.claude/projects
