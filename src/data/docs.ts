@@ -4,8 +4,8 @@ export const siteConfig = {
   description:
     "Documentation for agentscript, a Go CLI for opening, searching, filtering, slicing, splitting, exporting, and auditing Claude Code and Codex JSONL transcripts.",
   repoUrl: "https://github.com/amxv/agentscript",
-  accentColor: "#6d28d9",
-  accentColorDark: "#c4b5fd",
+  accentColor: "#11120f",
+  accentColorDark: "#d7ff3f",
   footerSections: [
     {
       title: "agentscript",
