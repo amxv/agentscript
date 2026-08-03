@@ -12,6 +12,7 @@ import (
 )
 
 type jsonLine struct {
+	Line      int
 	Type      string          `json:"type"`
 	Timestamp string          `json:"timestamp"`
 	Message   *message        `json:"message"`
@@ -399,7 +400,9 @@ func readJSONLines(data []byte) ([]jsonLine, error) {
 	s := bufio.NewScanner(bytes.NewReader(data))
 	buf := make([]byte, 0, 1024*1024)
 	s.Buffer(buf, 32*1024*1024)
+	lineNumber := 0
 	for s.Scan() {
+		lineNumber++
 		line := bytes.TrimSpace(s.Bytes())
 		if len(line) == 0 {
 			continue
@@ -409,6 +412,7 @@ func readJSONLines(data []byte) ([]jsonLine, error) {
 			continue
 		}
 		entry.Raw = append(json.RawMessage(nil), line...)
+		entry.Line = lineNumber
 		entries = append(entries, entry)
 	}
 	if err := s.Err(); err != nil {

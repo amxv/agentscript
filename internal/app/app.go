@@ -50,6 +50,8 @@ func Run(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 		return runFiles(args[1:], stdout, true)
 	case "activity", "git", "pr":
 		return runActivity(args[1:], stdout)
+	case "compactions", "compact":
+		return runCompactions(args[1:], stdout)
 	case "export":
 		return runExport(args[1:], stdout)
 	case "split":
@@ -666,6 +668,7 @@ func printRootHelp(w io.Writer) {
 		"  files             show files referenced in a transcript",
 		"  changes           show files changed in a transcript",
 		"  activity          summarize Git/PR/push/test activity",
+		"  compactions       inspect compaction boundaries and token usage",
 		"  export            export a transcript to text, Markdown, JSON, or HTML",
 		"  split             split a transcript into multiple rendered files",
 		"  config            show or initialize agentscript config",

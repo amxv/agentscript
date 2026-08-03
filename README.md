@@ -117,6 +117,17 @@ Expand all collapsed blocks:
 agentscript open transcript.jsonl --max-lines 40 --expand all
 ```
 
+## Compaction and usage inspection
+
+Inspect Claude and Codex lifecycle records without provider-specific `jq`:
+
+```bash
+agentscript compactions transcript.jsonl --format json
+agentscript compactions transcript.jsonl
+```
+
+JSON output includes ordered boundaries, provider-native metadata, raw line references, nearest usage snapshots, and normalized token fields. Claude `postTokens` is labeled as payload-only; `first_full_usage_after` exposes the later assistant usage that may include reattached system, tool, and cache context.
+
 ## Slicing
 
 Preserve the first 100 blocks of context:

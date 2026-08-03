@@ -119,6 +119,15 @@ agentscript pr transcript.jsonl
 
 These commands summarize branches, commits, PR URLs, pushes, validation commands, and failures.
 
+## Compactions
+
+```bash
+agentscript compactions transcript.jsonl
+agentscript compactions transcript.jsonl --format json
+```
+
+The command auto-detects Claude Code and Codex transcripts. JSON output includes ordered compaction boundaries, provider-native window or preserved-message metadata, raw line references, nearest usage snapshots, and normalized pre/post token fields. Claude `postTokens` is explicitly payload-only, while `first_full_usage_after` reports the next complete assistant usage snapshot.
+
 ## Export
 
 ```bash

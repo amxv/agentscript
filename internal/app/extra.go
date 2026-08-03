@@ -80,6 +80,24 @@ func runActivity(args []string, stdout io.Writer) error {
 	return transcript.RenderGitActivity(stdout, activity, format)
 }
 
+func runCompactions(args []string, stdout io.Writer) error {
+	var format string
+	fs := flag.NewFlagSet("compactions", flag.ContinueOnError)
+	fs.StringVar(&format, "format", "text", "output format: text or json")
+	if err := fs.Parse(interspersed(args, map[string]bool{"format": true})); err != nil {
+		return err
+	}
+	if fs.NArg() < 1 || isHelpArg(fs.Arg(0)) {
+		printCompactionsHelp(stdout)
+		return nil
+	}
+	report, err := transcript.InspectCompactionsFile(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	return transcript.RenderCompactions(stdout, report, format)
+}
+
 func runExport(args []string, stdout io.Writer) error {
 	var c commonFlags
 	var sliceSpec, turnSlice string
@@ -279,6 +297,24 @@ func printActivityHelp(w io.Writer) {
 		"",
 		"Usage:",
 		"  agentscript activity <path> [--format text|json]",
+	)
+}
+
+func printCompactionsHelp(w io.Writer) {
+	writeLines(w,
+		"agentscript compactions - inspect provider compaction and usage lifecycle records",
+		"",
+		"Usage:",
+		"  agentscript compactions <path> [--format text|json]",
+		"",
+		"The command auto-detects Claude Code and Codex JSONL transcripts.",
+		"JSON includes provider-native metadata, raw line references, nearest usage snapshots,",
+		"and normalized pre/post token fields. Claude postTokens is payload-only; the first",
+		"full assistant usage after a boundary can include reattached context/cache tokens.",
+		"",
+		"Examples:",
+		"  agentscript compactions transcript.jsonl --format json",
+		"  agentscript compactions ~/.codex/sessions/.../rollout.jsonl",
 	)
 }
 

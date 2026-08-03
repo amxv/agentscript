@@ -14,10 +14,27 @@ func TestHelp(t *testing.T) {
 		t.Fatalf("Run help: %v", err)
 	}
 	out := stdout.String()
-	for _, want := range []string{"agentscript", "open [path]", "slice <path> <range>", "search <query>"} {
+	for _, want := range []string{"agentscript", "open [path]", "slice <path> <range>", "search <query>", "compactions"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+func TestCompactionsCommandJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "claude.jsonl")
+	fixture := `{"type":"user","timestamp":"2026-08-03T02:00:00Z","message":{"role":"user","content":"hello"}}
+{"type":"system","timestamp":"2026-08-03T02:01:00Z","subtype":"compact_boundary","compactMetadata":{"trigger":"manual","preTokens":100,"postTokens":20,"durationMs":5}}` + "\n"
+	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"compactions", "--format", "json", path}, os.Stdin, &stdout, &stderr); err != nil {
+		t.Fatalf("Run compactions: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"provider": "claude"`) || !strings.Contains(stdout.String(), `"post_tokens": 20`) {
+		t.Fatalf("unexpected compactions output:\n%s", stdout.String())
 	}
 }
 
