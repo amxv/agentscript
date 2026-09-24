@@ -6,6 +6,7 @@ import (
 	"io"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -228,8 +229,9 @@ func GitAndPRActivity(tr Transcript) GitActivity {
 			addUnique(&a.PRs, pr)
 		}
 		if b.Kind == KindCommand {
-			cmd := strings.TrimSpace(toolInputText(b))
-			low := strings.ToLower(cmd)
+			rawCmd := strings.TrimSpace(toolInputText(b))
+			cmd := commandSummaryText(b)
+			low := strings.ToLower(rawCmd)
 			switch {
 			case strings.Contains(low, "git push"):
 				addUnique(&a.Pushes, fmt.Sprintf("#%03d %s", b.Index, cmd))
@@ -240,8 +242,7 @@ func GitAndPRActivity(tr Transcript) GitActivity {
 			}
 		}
 		if b.Kind == KindCommandResult || b.Kind == KindToolResult {
-			low := strings.ToLower(text)
-			if b.IsError || strings.Contains(low, "remote rejected") || strings.Contains(low, "error:") || strings.Contains(low, "failed") || strings.Contains(low, "permission denied") {
+			if b.IsError || looksLikeFailure(text) {
 				addUnique(&a.Failures, fmt.Sprintf("#%03d %s", b.Index, firstLine(text)))
 			}
 			for _, c := range commitRE.FindAllString(text, -1) {
@@ -258,6 +259,63 @@ func GitAndPRActivity(tr Transcript) GitActivity {
 	sort.Strings(a.Commits)
 	sort.Strings(a.PRs)
 	return a
+}
+
+var codeModeCommandRE = regexp.MustCompile(`(?s)(?:cmd|command)\s*:\s*("(?:\\.|[^"\\])*")`)
+var codeModeBacktickCommandRE = regexp.MustCompile("(?s)(?:cmd|command)\\s*:\\s*`([^`]*)`")
+
+func commandSummaryText(b Block) string {
+	text := strings.TrimSpace(toolInputText(b))
+	raw, _ := b.ToolInput["raw"].(string)
+	if raw == "" {
+		return text
+	}
+	var commands []string
+	for _, match := range codeModeCommandRE.FindAllStringSubmatch(raw, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		if decoded, err := strconv.Unquote(match[1]); err == nil && strings.TrimSpace(decoded) != "" {
+			commands = append(commands, strings.TrimSpace(decoded))
+		}
+		if len(commands) == 3 {
+			break
+		}
+	}
+	if len(commands) == 0 {
+		for _, match := range codeModeBacktickCommandRE.FindAllStringSubmatch(raw, -1) {
+			if len(match) > 1 && !strings.Contains(match[1], "${") && strings.TrimSpace(match[1]) != "" {
+				commands = append(commands, strings.TrimSpace(match[1]))
+			}
+			if len(commands) == 3 {
+				break
+			}
+		}
+	}
+	if len(commands) > 0 {
+		return strings.Join(commands, " ; ")
+	}
+	if strings.Contains(raw, "tools.write_stdin") {
+		return "continue/poll a running command session"
+	}
+	return text
+}
+
+func looksLikeFailure(text string) bool {
+	low := strings.ToLower(strings.TrimSpace(text))
+	if low == "" {
+		return false
+	}
+	for _, marker := range []string{
+		"remote rejected", "permission denied", "command failed", "process exited with code 1",
+		"exit code: 1", "exit code 1", "fatal:", "panic:", "tests failed", "test failed",
+	} {
+		if strings.Contains(low, marker) {
+			return true
+		}
+	}
+	first := strings.ToLower(firstLine(text))
+	return strings.HasPrefix(first, "error:") || strings.HasPrefix(first, "failed:") || first == "failed"
 }
 
 func RenderGitActivity(w io.Writer, a GitActivity, format string) error {

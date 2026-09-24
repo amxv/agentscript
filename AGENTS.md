@@ -4,7 +4,7 @@ Guidance for coding agents working in `agentscript`.
 
 ## Purpose
 
-`agentscript` is a Go CLI for reading Claude Code and Codex JSONL transcripts. It normalizes both formats into stable renderable blocks so users can search, filter, and slice transcript ranges from the terminal.
+`agentscript` is a Go CLI for agent-to-agent transcript handoff plus Claude Code/Codex history search and inspection. It normalizes both formats into stable renderable blocks so users and agents can transfer context, search, filter, and slice transcript ranges from the terminal.
 
 ## Architecture
 
@@ -47,10 +47,13 @@ Direct commands:
 
 ## CLI design guardrails
 
-- `agentscript` without a command should show help only. `open` is the main entry point.
+- `agentscript` without a command should show help only.
+- `handoff` is the primary agent-to-agent transfer workflow. A bare `.jsonl`/`file://` transcript reference should behave like `handoff`.
+- `open` remains the explicit raw/full transcript rendering primitive; do not silently change its semantics to handoff mode.
 - Non-interactive usage is first-class: every TUI/picker behavior should have flag equivalents.
 - Flags should work before or after positional paths/ranges.
 - Keep command-local help expressive and example-heavy.
+- Handoff output should be self-teaching: receiving agents should see the current request, task-local activity, stable indexes, and exact drill-down commands without needing prior agentscript knowledge.
 
 ## Release contract
 

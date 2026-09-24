@@ -1,6 +1,6 @@
 ---
 title: Command reference
-description: Commands and flags for opening, listing, searching, filtering, slicing, splitting, exporting, and inspecting transcripts.
+description: Commands and flags for handoff, search, opening, filtering, slicing, export, and transcript inspection.
 order: 2
 category: Reference
 summary: The complete command map for agentscript.
@@ -13,12 +13,48 @@ agentscript --help
 agentscript --version
 ```
 
+## Handoff
+
+`handoff` is the agent-to-agent continuation command. A receiving agent should use it first when given a transcript path and asked to continue prior work.
+
+```bash
+agentscript handoff <path-or-session-id>
+agentscript continue <path-or-session-id>
+agentscript <path.jsonl>
+```
+
+It emits Markdown by default and includes current-task requests, recent work, changed files, task-scoped activity, and drill-down commands. Copied `file://` URLs and quoted `~` paths are normalized automatically.
+
+Flags:
+
+```bash
+--last 40
+--user-turns 3
+--max-lines 30
+--files 20
+--commands 10
+--format md|json
+--out <file>
+--roots <paths>
+```
+
+`--last` counts visible handoff blocks after noisy thinking/results are removed. Command breadcrumbs are capped separately by `--commands`.
+
 ## Open
 
 ```bash
 agentscript open [path] [flags]
 agentscript open --path <path> [flags]
 agentscript open --latest 1 [flags]
+```
+
+Discovery filters:
+
+```bash
+--provider claude|codex
+--project <name-or-cwd-fragment>
+--since 30d|2w|2026-09-01|<RFC3339>
+--refresh
 ```
 
 Common flags:
@@ -75,22 +111,55 @@ agentscript open transcript.jsonl --turns --turn-slice 2:4
 
 ```bash
 agentscript search "publish-pr"
-agentscript search "r2 cors" --provider claude --latest 20
-agentscript search push rejected --all --near 20
+agentscript search "r2 cors" --provider claude
+agentscript search push rejected
+agentscript search push rejected --near 20
+agentscript search permission denied --any
 agentscript search "git (push|pull)" --regex --tool Bash
 agentscript search permission --search-kind command_result
 ```
+
+Search covers all discovered history unless `--latest N` is supplied. Multiple query arguments are ANDed by default. Results are grouped by session.
+
+Text results print a `continue:` handoff command for each matching session, followed by an `inspect:` command around the matched block.
 
 Search flags:
 
 ```bash
 --regex
 --case-sensitive
---all
+--any
 --near <blocks>
 --search-kind <kinds>
 --tool <names>
+--provider claude|codex
+--project <name-or-cwd-fragment>
+--since <date-or-duration>
+--latest <sessions>
+--limit <matching-sessions>
+--hits <hits-per-session>
+--format json
+--out <file>
+--refresh
 ```
+
+`--all` remains accepted as a compatibility alias; AND matching is now the default.
+
+## Index
+
+The normalized search cache is incremental. Indexed sessions use a metadata marker, normalized text sidecar, and compressed structured block cache. Candidate lookup runs against the normalized text first; only matching structured entries are decoded. Uncached transcripts are candidate-filtered before parsing.
+
+```bash
+agentscript index status
+agentscript index status --format json
+agentscript index rebuild
+agentscript index rebuild --project agentscript --since 30d
+agentscript index clear
+```
+
+Set `AGENTSCRIPT_CACHE_DIR` to override the platform cache directory.
+
+The cache contains normalized transcript text and is local to your machine; it is not separately encrypted. `agentscript index clear` removes both current and legacy search-index data.
 
 ## Commands
 

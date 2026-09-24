@@ -2,10 +2,13 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/amxv/agentscript/internal/transcript"
 )
 
 func TestHelp(t *testing.T) {
@@ -111,5 +114,100 @@ func TestCodexHelp(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("codex help missing %q:\n%s", want, stdout.String())
 		}
+	}
+}
+
+func TestSearchCommandUsesGlobalSearchSemanticsAndJSONGroups(t *testing.T) {
+	t.Setenv("AGENTSCRIPT_CACHE_DIR", t.TempDir())
+	root := t.TempDir()
+	fixtures := map[string]string{
+		"one.jsonl": "push rejected by remote",
+		"two.jsonl": "push accepted by remote",
+	}
+	for name, message := range fixtures {
+		path := filepath.Join(root, name)
+		fixture := `{"type":"user","timestamp":"2026-09-20T10:00:00Z","cwd":"/work/agentscript","sessionId":"` + name + `","message":{"role":"user","content":"` + message + `"}}` + "\n"
+		if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"search", "push", "rejected", "--roots", root, "--provider", "claude", "--format", "json"}, os.Stdin, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run search: %v", err)
+	}
+	var result struct {
+		Stats struct {
+			MatchedFiles int `json:"matched_files"`
+		} `json:"stats"`
+		Groups []struct {
+			Session transcript.Session `json:"session"`
+			Count   int                `json:"count"`
+		} `json:"groups"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decode search JSON: %v\n%s", err, stdout.String())
+	}
+	if result.Stats.MatchedFiles != 1 || len(result.Groups) != 1 || result.Groups[0].Count != 1 {
+		t.Fatalf("unexpected search result: %+v", result)
+	}
+	if result.Groups[0].Session.Project != "agentscript" {
+		t.Fatalf("project = %q, want agentscript", result.Groups[0].Session.Project)
+	}
+}
+
+func TestIndexStatusCommand(t *testing.T) {
+	t.Setenv("AGENTSCRIPT_CACHE_DIR", t.TempDir())
+	root := t.TempDir()
+	path := filepath.Join(root, "one.jsonl")
+	fixture := `{"type":"user","timestamp":"2026-09-20T10:00:00Z","message":{"role":"user","content":"hello"}}` + "\n"
+	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"index", "status", "--roots", root, "--provider", "claude", "--format", "json"}, os.Stdin, &stdout, &stderr); err != nil {
+		t.Fatalf("Run index status: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"sessions": 1`) || !strings.Contains(stdout.String(), `"missing": 1`) {
+		t.Fatalf("unexpected index status:\n%s", stdout.String())
+	}
+}
+
+func TestBareTranscriptPathRunsHandoff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "handoff.jsonl")
+	fixture := `{"type":"user","timestamp":"2026-09-20T10:00:00Z","cwd":"/work/demo","sessionId":"session-1","message":{"role":"user","content":"package the release"}}` + "\n" +
+		`{"type":"assistant","timestamp":"2026-09-20T10:00:01Z","message":{"role":"assistant","content":[{"type":"text","text":"I started the release work."}]}}` + "\n" +
+		`{"type":"user","timestamp":"2026-09-20T10:00:02Z","cwd":"/work/demo","sessionId":"session-1","message":{"role":"user","content":"keep going"}}` + "\n"
+	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{path}, os.Stdin, &stdout, &stderr); err != nil {
+		t.Fatalf("Run bare handoff: %v", err)
+	}
+	for _, want := range []string{"# Agent continuation context", "package the release", "keep going", "## Drill down"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("handoff missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+func TestContinueAliasJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "handoff.jsonl")
+	fixture := `{"type":"user","timestamp":"2026-09-20T10:00:00Z","cwd":"/work/demo","sessionId":"session-1","message":{"role":"user","content":"continue this work"}}` + "\n"
+	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"continue", path, "--format", "json"}, os.Stdin, &stdout, &stderr); err != nil {
+		t.Fatalf("Run continue: %v", err)
+	}
+	var report transcript.HandoffReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decode handoff JSON: %v\n%s", err, stdout.String())
+	}
+	if report.Session.Project != "demo" || len(report.UserRequests) != 1 {
+		t.Fatalf("unexpected handoff report: %+v", report)
 	}
 }

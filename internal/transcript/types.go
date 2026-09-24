@@ -1,6 +1,9 @@
 package transcript
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Provider string
 
@@ -42,6 +45,25 @@ type Transcript struct {
 	Path     string   `json:"path,omitempty"`
 	Provider Provider `json:"provider"`
 	Blocks   []Block  `json:"blocks"`
+}
+
+type SessionSource struct {
+	Path     string   `json:"path"`
+	Provider Provider `json:"provider"`
+}
+
+type Session struct {
+	ID          string    `json:"id,omitempty"`
+	Path        string    `json:"path"`
+	Provider    Provider  `json:"provider"`
+	Project     string    `json:"project,omitempty"`
+	CWD         string    `json:"cwd,omitempty"`
+	ModTime     time.Time `json:"mod_time"`
+	StartedAt   time.Time `json:"started_at,omitempty"`
+	Size        int64     `json:"size"`
+	Title       string    `json:"title"`
+	FirstPrompt string    `json:"first_prompt,omitempty"`
+	Auxiliary   string    `json:"auxiliary,omitempty"`
 }
 
 type RenderOptions struct {

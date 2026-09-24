@@ -11,10 +11,10 @@ summary: How native binaries, GitHub releases, and npm publishing fit together.
 The release workflow runs when a `v*` tag is pushed:
 
 ```bash
-make release-tag VERSION=0.2.0
+make release-tag VERSION=0.3.0
 ```
 
-That creates and pushes `v0.2.0`.
+That creates and pushes `v0.3.0`.
 
 ## What the workflow does
 
@@ -39,6 +39,7 @@ Examples:
 agentscript_darwin_arm64
 agentscript_linux_amd64
 agentscript_windows_amd64.exe
+agentscript_windows_arm64.exe
 ```
 
 ## Required secret

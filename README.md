@@ -1,8 +1,8 @@
 # agentscript
 
-`agentscript` is a terminal-first transcript reader for Claude Code and Codex JSONL sessions.
+`agentscript` is a terminal-first handoff, search, and transcript reader for Claude Code and Codex JSONL sessions.
 
-It turns local agent transcripts into readable, indexed blocks so you can search, inspect, hide noisy parts, slice exact context ranges, extract file and command activity, and export handoff-ready Markdown or HTML.
+It makes agent-to-agent context transfer a one-command workflow, while also turning local transcripts into readable indexed blocks for search, inspection, slicing, file/command activity, and export.
 
 ## Install
 
@@ -17,6 +17,40 @@ For local development:
 make build
 ./dist/agentscript --help
 ```
+
+## Agent handoff — the primary workflow
+
+When you give a new agent a transcript path and ask it to continue the work, the first command should be:
+
+```bash
+agentscript handoff /path/to/transcript.jsonl
+```
+
+`handoff` produces continuation-ready Markdown with the current task requests, a compact recent work trace, files changed during the task (or relevant earlier edits), Git/validation/failure activity, and exact drill-down commands. It deliberately treats the transcript as historical context and reminds the receiving agent to verify the live filesystem before making changes.
+
+The natural alias and bare-path shortcut work too:
+
+```bash
+agentscript continue /path/to/transcript.jsonl
+agentscript /path/to/transcript.jsonl
+```
+
+You can also use a full Claude/Codex session UUID instead of a path, or paste a `file://` URL:
+
+```bash
+agentscript handoff 019f91bc-123f-7692-8a78-21e54d6677e6
+agentscript handoff 'file:///Users/me/.codex/sessions/.../rollout.jsonl'
+```
+
+Useful handoff controls:
+
+```bash
+agentscript handoff transcript.jsonl --last 80
+agentscript handoff transcript.jsonl --format json
+agentscript handoff transcript.jsonl --out HANDOFF.md
+```
+
+The default handoff repeats terse continuation turns such as `keep going` together with nearby substantive requests, hides thinking and bulky tool results, keeps stable block indexes, and limits command noise. Use the drill-down commands it prints when more history is needed.
 
 ## Open transcripts
 
@@ -45,6 +79,15 @@ Run `agentscript open` with no path to launch the latest-transcript picker. Disc
 ```bash
 ~/.claude/projects
 ~/.codex/sessions
+```
+
+Discovery keeps provider identity with the configured source, so custom `CLAUDE_CONFIG_DIR` and `CODEX_HOME` locations do not need `.claude` or `.codex` in their paths. A short-lived session catalog cache avoids repeatedly walking large transcript trees; use `--refresh` when you explicitly want to rescan them.
+
+Filter discovery by project or age:
+
+```bash
+agentscript list --project agentscript --since 30d
+agentscript open --project agentscript --latest 1
 ```
 
 ## Stable block indexes and turns
@@ -157,23 +200,39 @@ agentscript split transcript.jsonl --every 80 --out-dir parts --format html
 
 ## Search
 
-Basic search:
+Search all discovered Claude Code and Codex history by default:
 
 ```bash
 agentscript search "publish-pr"
-agentscript search "r2 cors" --provider claude --latest 20
+agentscript search "r2 cors" --provider claude
+agentscript search "old migration" --project agentscript --since 180d
 ```
 
-Advanced search:
+Multiple unquoted query arguments are ANDed by default. Use `--any` for OR matching, or `--near` when the terms can occur in nearby blocks:
 
 ```bash
-agentscript search push rejected --all --near 20
+agentscript search push rejected
+agentscript search permission denied --any
+agentscript search push rejected --near 20
 agentscript search "git (push|pull)" --regex --tool Bash
 agentscript search permission --search-kind command_result
 agentscript search YOLO --case-sensitive
 ```
 
-Each result includes the matching block index and an `agentscript open ... --around <index>` command.
+Results are grouped by session and include matching stable block indexes plus both a ready-to-run `agentscript handoff ...` continuation command and an `agentscript open ... --around <index>` inspection command. `--limit` controls how many matching sessions are printed and `--hits` controls matches shown per session. `--latest N` is an explicit history filter rather than the default search scope.
+
+Search uses an incremental normalized cache. Each indexed session gets a small metadata marker, a normalized text sidecar for fast candidate lookup, and a compressed structured block cache used to verify exact search semantics. Uncached history is candidate-filtered first and only matching transcripts are parsed. If `rg` is installed it is used as an accelerator, with a pure-Go fallback.
+
+Inspect or prebuild the normalized cache:
+
+```bash
+agentscript index status
+agentscript index rebuild --since 30d
+agentscript index rebuild --project agentscript
+agentscript index clear
+```
+
+The index is local and contains normalized transcript text; it is not encrypted separately from your filesystem. Use `AGENTSCRIPT_CACHE_DIR` to choose its location or `agentscript index clear` to remove it.
 
 ## Command, file, and activity views
 

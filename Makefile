@@ -21,7 +21,7 @@ help:
 	@echo "  make lint         - run Node script checks"
 	@echo "  make check        - fmt + test + vet + lint"
 	@echo "  make build        - build local binary to dist/agentscript"
-	@echo "  make build-all    - build release binaries for 5 target platforms"
+	@echo "  make build-all    - build release binaries for 6 target platforms"
 	@echo "  make install-local- install CLI to ~/.local/bin/agentscript"
 	@echo "  make clean        - remove dist artifacts"
 	@echo "  make release-tag  - create and push git tag (requires VERSION=x.y.z)"
@@ -46,13 +46,13 @@ build:
 
 build-all:
 	@mkdir -p $(DIST_DIR)
-	@for target in "darwin amd64" "darwin arm64" "linux amd64" "linux arm64" "windows amd64"; do \
+	@set -e; for target in "darwin amd64" "darwin arm64" "linux amd64" "linux arm64" "windows amd64" "windows arm64"; do \
 		set -- $$target; \
 		GOOS=$$1; GOARCH=$$2; \
 		EXT=""; \
 		if [ "$$GOOS" = "windows" ]; then EXT=".exe"; fi; \
 		echo "Building $(BIN_NAME) for $$GOOS/$$GOARCH"; \
-		CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH $(GO) build -trimpath -ldflags="$(LDFLAGS)" -o "$(DIST_DIR)/$(BIN_NAME)_$$GOOS_$$GOARCH$$EXT" $(CMD_PATH); \
+		CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH $(GO) build -trimpath -ldflags="$(LDFLAGS)" -o "$(DIST_DIR)/$(BIN_NAME)_$${GOOS}_$${GOARCH}$$EXT" $(CMD_PATH); \
 	done
 
 install-local: build

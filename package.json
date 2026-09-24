@@ -1,7 +1,7 @@
 {
   "name": "@amxv/agentscript",
-  "version": "0.2.0",
-  "description": "Readable Claude Code and Codex JSONL transcript searcher, renderer, and slicer",
+  "version": "0.3.0",
+  "description": "Agent handoff, history search, and readable Claude Code/Codex transcript CLI",
   "license": "MIT",
   "author": "amxv",
   "repository": {
@@ -47,6 +47,8 @@
     "codex",
     "jsonl",
     "transcript",
+    "handoff",
+    "context-transfer",
     "cli",
     "agent"
   ],

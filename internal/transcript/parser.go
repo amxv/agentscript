@@ -44,6 +44,7 @@ type pendingTool struct {
 }
 
 func ParseFile(path string) (Transcript, error) {
+	path = NormalizeTranscriptPath(path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Transcript{}, err

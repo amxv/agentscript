@@ -31,7 +31,15 @@ func Run(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 		return nil
 	}
 
+	// A copied transcript path is the most common agent-to-agent transfer input.
+	// Make it useful without requiring the receiving agent to learn subcommands.
+	if transcript.LooksLikeTranscriptReference(args[0]) {
+		return runHandoff(args, stdout)
+	}
+
 	switch args[0] {
+	case "handoff", "continue":
+		return runHandoff(args[1:], stdout)
 	case "open":
 		return runOpen(args[1:], stdin, stdout, stderr, false)
 	case "codex":
@@ -42,6 +50,8 @@ func Run(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 		return runList(args[1:], stdout)
 	case "search":
 		return runSearch(args[1:], stdout)
+	case "index":
+		return runIndex(args[1:], stdout)
 	case "commands", "cmds":
 		return runCommands(args[1:], stdout)
 	case "files":
@@ -220,7 +230,10 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 	var latest int
 	var provider string
 	var roots string
+	var project string
+	var since string
 	var noTUI bool
+	var refresh bool
 	from, to, last, around, before, after := -1, -1, 0, -1, 25, 50
 
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
@@ -239,7 +252,10 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 	fs.IntVar(&latest, "latest", 0, "open the Nth latest transcript; 1 is most recent")
 	fs.StringVar(&provider, "provider", "", "provider filter for latest/picker: claude or codex")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery and session ID lookup")
+	fs.StringVar(&project, "project", "", "only consider sessions whose project/cwd matches this value")
+	fs.StringVar(&since, "since", "", "only consider sessions since a date or duration such as 2026-09-01 or 30d")
 	fs.BoolVar(&noTUI, "no-tui", false, "do not launch the picker when no path is provided")
+	fs.BoolVar(&refresh, "refresh", false, "refresh the cached session catalog before discovery")
 	if err := fs.Parse(interspersed(args, openValueFlags())); err != nil {
 		return err
 	}
@@ -265,11 +281,24 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 			return err
 		}
 		path = resolved
-	}
-	if path == "" {
-		sessions, err := transcript.Discover(80, parseProvider(provider), splitCSV(roots))
+	} else if path != "" {
+		resolved, err := transcript.ResolveSessionReference(path, splitCSV(roots))
 		if err != nil {
 			return err
+		}
+		path = resolved
+	}
+	if path == "" {
+		sessions, err := transcript.DiscoverCached(0, parseProvider(provider), splitCSV(roots), refresh)
+		if err != nil {
+			return err
+		}
+		sessions, err = filterSessions(sessions, project, since)
+		if err != nil {
+			return err
+		}
+		if len(sessions) > 80 {
+			sessions = sessions[:80]
 		}
 		if len(sessions) == 0 {
 			return errors.New("no transcripts found in default roots; pass --path or add --roots")
@@ -280,9 +309,11 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 			}
 			path = sessions[latest-1].Path
 		} else if noTUI {
+			sessions = transcript.HydrateSessions(sessions, 20)
 			printSessions(stdout, sessions, 20)
 			return nil
 		} else {
+			sessions = transcript.HydrateSessions(sessions, 30)
 			picked, err := pickSession(stdin, stdout, sessions)
 			if err != nil {
 				printSessions(stdout, sessions, 20)
@@ -310,12 +341,20 @@ func runSlice(args []string, stdout io.Writer) error {
 }
 
 func runList(args []string, stdout io.Writer) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		printListHelp(stdout)
+		return nil
+	}
 	var latest int
-	var provider, roots string
+	var provider, roots, project, since string
+	var refresh bool
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.IntVar(&latest, "latest", 50, "number of latest transcripts to show")
 	fs.StringVar(&provider, "provider", "", "provider filter: claude or codex")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery")
+	fs.StringVar(&project, "project", "", "only show sessions whose project/cwd matches this value")
+	fs.StringVar(&since, "since", "", "only show sessions since a date or duration such as 30d")
+	fs.BoolVar(&refresh, "refresh", false, "refresh the cached session catalog")
 	if err := fs.Parse(interspersed(args, listValueFlags())); err != nil {
 		return err
 	}
@@ -323,30 +362,48 @@ func runList(args []string, stdout io.Writer) error {
 		printListHelp(stdout)
 		return nil
 	}
-	sessions, err := transcript.Discover(latest, parseProvider(provider), splitCSV(roots))
+	sessions, err := transcript.DiscoverCached(0, parseProvider(provider), splitCSV(roots), refresh)
 	if err != nil {
 		return err
 	}
+	sessions, err = filterSessions(sessions, project, since)
+	if err != nil {
+		return err
+	}
+	if latest > 0 && len(sessions) > latest {
+		sessions = sessions[:latest]
+	}
+	sessions = transcript.HydrateSessions(sessions, len(sessions))
 	printSessions(stdout, sessions, latest)
 	return nil
 }
 
 func runSearch(args []string, stdout io.Writer) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		printSearchHelp(stdout)
+		return nil
+	}
 	var c commonFlags
-	var latest, near int
-	var provider, roots, kind, tool string
-	var regex, caseSensitive, all bool
+	var latest, near, limit, hits int
+	var provider, roots, kind, tool, project, since string
+	var regex, caseSensitive, all, any, refresh bool
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	addCommonFlags(fs, &c)
-	fs.IntVar(&latest, "latest", 100, "number of latest transcripts to search")
+	fs.IntVar(&latest, "latest", 0, "search only the N latest transcripts (default: all)")
+	fs.IntVar(&limit, "limit", 20, "maximum matching sessions to print; 0 means all")
+	fs.IntVar(&hits, "hits", 3, "maximum matching blocks to print per session; 0 means all")
 	fs.StringVar(&provider, "provider", "", "provider filter: claude or codex")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery")
+	fs.StringVar(&project, "project", "", "only search sessions whose project/cwd matches this value")
+	fs.StringVar(&since, "since", "", "only search sessions since a date or duration such as 30d")
 	fs.StringVar(&kind, "search-kind", "", "only search comma-separated block kinds")
 	fs.StringVar(&tool, "tool", "", "only search comma-separated tool/command names")
 	fs.BoolVar(&regex, "regex", false, "treat queries as regular expressions")
 	fs.BoolVar(&caseSensitive, "case-sensitive", false, "case-sensitive search")
-	fs.BoolVar(&all, "all", false, "require all query args to match")
+	fs.BoolVar(&any, "any", false, "match any query argument instead of requiring all")
+	fs.BoolVar(&all, "all", false, "deprecated compatibility alias; all query args are required by default")
 	fs.IntVar(&near, "near", 0, "require all query args to appear within N blocks")
+	fs.BoolVar(&refresh, "refresh", false, "refresh the cached session catalog before searching")
 	if err := fs.Parse(interspersed(args, searchValueFlags())); err != nil {
 		return err
 	}
@@ -355,17 +412,31 @@ func runSearch(args []string, stdout io.Writer) error {
 		return nil
 	}
 	queries := fs.Args()
-	sessions, err := transcript.Discover(latest, parseProvider(provider), splitCSV(roots))
+	sessions, err := transcript.DiscoverCached(0, parseProvider(provider), splitCSV(roots), refresh)
 	if err != nil {
 		return err
 	}
-	renderOpts, err := c.renderOptions()
+	sessions, err = filterSessions(sessions, project, since)
 	if err != nil {
 		return err
 	}
-	mode := transcript.SearchAny
-	if all || near > 0 {
-		mode = transcript.SearchAll
+	if latest > 0 && len(sessions) > latest {
+		sessions = sessions[:latest]
+	}
+	searchCommon := c
+	if searchCommon.profile == "" {
+		// Search should cover all normalized block kinds by default, regardless of
+		// a user's default rendering profile (for example "compact"). Explicit
+		// search/render flags still apply below.
+		searchCommon.profile = "full"
+	}
+	renderOpts, err := searchCommon.renderOptions()
+	if err != nil {
+		return err
+	}
+	mode := transcript.SearchAll
+	if any && !all && near == 0 {
+		mode = transcript.SearchAny
 	}
 	searchKinds := transcript.ParseKinds(splitCSV(kind))
 	if kind == "" && len(renderOpts.OnlyKinds) > 0 {
@@ -375,21 +446,74 @@ func runSearch(args []string, stdout io.Writer) error {
 	if tool == "" && len(renderOpts.OnlyTools) > 0 {
 		searchTools = renderOpts.OnlyTools
 	}
-	matches, err := transcript.SearchAdvanced(sessions, transcript.SearchOptions{
+	matches, stats, err := transcript.SearchHistory(sessions, transcript.SearchOptions{
 		Queries: queries, Mode: mode, Near: near, Regex: regex, CaseSensitive: caseSensitive,
 		Kinds: searchKinds, Tools: searchTools, RenderOptions: renderOpts,
 	})
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "%d matches across %d transcripts\n\n", len(matches), len(sessions))
-	for i, m := range matches {
-		_, _ = fmt.Fprintf(stdout, "[%d] %s  %s  %s\n", i+1, m.Session.Provider, formatTime(m.Session.ModTime), m.Session.Title)
-		_, _ = fmt.Fprintf(stdout, "    %s\n", transcript.FormatSummaryBlock(m.Block))
-		if m.Snippet != "" {
-			_, _ = fmt.Fprintf(stdout, "    %s\n", m.Snippet)
+	groups := transcript.GroupMatches(matches)
+	if limit > 0 && len(groups) > limit {
+		groups = groups[:limit]
+	}
+	if hits > 0 {
+		for i := range groups {
+			if len(groups[i].Hits) > hits {
+				groups[i].Hits = groups[i].Hits[:hits]
+			}
 		}
-		_, _ = fmt.Fprintf(stdout, "    open: %s open %q --around %d\n\n", commandName, m.Session.Path, m.Block.Index)
+	}
+	searchFormat := strings.ToLower(strings.TrimSpace(c.format))
+	if searchFormat != "" && searchFormat != "text" && searchFormat != "plain" && searchFormat != "json" {
+		return fmt.Errorf("search supports --format text or json, got %q", c.format)
+	}
+	writer := stdout
+	var outFile *os.File
+	if c.out != "" {
+		if dir := filepath.Dir(c.out); dir != "." {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
+		}
+		f, err := os.Create(c.out)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		outFile = f
+		writer = outFile
+	}
+	if searchFormat == "json" {
+		return transcript.RenderSearchJSON(writer, groups, stats)
+	}
+	_, _ = fmt.Fprintf(writer, "%d matching sessions, %d hits; searched %d transcripts (%d candidates)\n\n", stats.MatchedFiles, stats.MatchedHits, stats.Sessions, stats.Candidates)
+	for i, group := range groups {
+		s := group.Session
+		_, _ = fmt.Fprintf(writer, "[%d] %-6s %-16s %s\n", i+1, s.Provider, formatTime(s.ModTime), s.Title)
+		if s.Project != "" || s.ID != "" {
+			_, _ = fmt.Fprintf(writer, "    project: %s  session: %s\n", fallbackDash(s.Project), fallbackDash(s.ID))
+		}
+		if s.Auxiliary != "" {
+			_, _ = fmt.Fprintf(writer, "    auxiliary: %s\n", s.Auxiliary)
+		}
+		for _, m := range group.Hits {
+			if m.EndIndex > m.Block.Index {
+				summary := strings.TrimPrefix(transcript.FormatSummaryBlock(m.Block), fmt.Sprintf("#%03d ", m.Block.Index))
+				_, _ = fmt.Fprintf(writer, "    #%03d–#%03d %s\n", m.Block.Index, m.EndIndex, summary)
+			} else {
+				_, _ = fmt.Fprintf(writer, "    %s\n", transcript.FormatSummaryBlock(m.Block))
+			}
+			if m.Snippet != "" {
+				_, _ = fmt.Fprintf(writer, "      %s\n", m.Snippet)
+			}
+		}
+		_, _ = fmt.Fprintf(writer, "    continue: %s\n", handoffCommand(s.Path))
+		_, _ = fmt.Fprintf(writer, "    inspect: %s open %q --around %d\n", commandName, s.Path, group.Hits[0].Block.Index)
+		if group.Count > len(group.Hits) {
+			_, _ = fmt.Fprintf(writer, "    (%d more hits; use --hits 0 to show all)\n", group.Count-len(group.Hits))
+		}
+		_, _ = fmt.Fprintln(writer)
 	}
 	return nil
 }
@@ -570,19 +694,19 @@ func commonValueFlags() map[string]bool {
 
 func openValueFlags() map[string]bool {
 	m := commonValueFlags()
-	for _, k := range []string{"path", "p", "slice", "turn-slice", "from", "to", "last", "around", "before", "after", "latest", "provider", "roots"} {
+	for _, k := range []string{"path", "p", "slice", "turn-slice", "from", "to", "last", "around", "before", "after", "latest", "provider", "roots", "project", "since"} {
 		m[k] = true
 	}
 	return m
 }
 
 func listValueFlags() map[string]bool {
-	return map[string]bool{"latest": true, "provider": true, "roots": true}
+	return map[string]bool{"latest": true, "provider": true, "roots": true, "project": true, "since": true}
 }
 
 func searchValueFlags() map[string]bool {
 	m := commonValueFlags()
-	for _, k := range []string{"latest", "provider", "roots", "search-kind", "tool", "near"} {
+	for _, k := range []string{"latest", "limit", "hits", "provider", "roots", "project", "since", "search-kind", "tool", "near"} {
 		m[k] = true
 	}
 	return m
@@ -659,10 +783,12 @@ func printRootHelp(w io.Writer) {
 		"  agentscript <command> [arguments]",
 		"",
 		"Commands:",
+		"  handoff <path>    continuation-ready context for another agent (alias: continue)",
 		"  open [path]       open/render a transcript, or pick from latest sessions",
 		"  codex <session-id>  open/render a Codex transcript by session ID",
 		"  slice <path> <range>  render a stable block-index slice like 0:100",
-		"  search <query>    search latest Claude/Codex transcripts",
+		"  search <query>    search Claude/Codex transcript history",
+		"  index             inspect/rebuild the normalized search cache",
 		"  list              list latest discovered transcripts",
 		"  commands          show shell commands and optional outputs",
 		"  files             show files referenced in a transcript",
@@ -673,13 +799,20 @@ func printRootHelp(w io.Writer) {
 		"  split             split a transcript into multiple rendered files",
 		"  config            show or initialize agentscript config",
 		"",
+		"Agent handoff:",
+		"  If a user gives you a transcript path and asks you to continue, run `agentscript handoff <path>` first.",
+		"  A bare transcript path also works: `agentscript /path/to/session.jsonl`.",
+		"",
 		"Examples:",
+		"  agentscript handoff ~/.codex/sessions/.../rollout.jsonl",
+		"  agentscript /path/to/session.jsonl",
 		"  agentscript open ~/.claude/projects/.../session.jsonl",
 		"  agentscript open --path ~/.codex/sessions/.../rollout.jsonl --hide-thinking",
 		"  agentscript codex 019f91bc-123f-7692-8a78-21e54d6677e6",
 		"  agentscript open transcript.jsonl --slice 0:100 --out context.md --format md",
 		"  agentscript slice transcript.jsonl 100: --messages-only",
 		"  agentscript search \"publish-pr\" --provider codex",
+		"  agentscript search \"old migration\" --project agentscript --since 90d",
 		"  agentscript list --latest 20",
 	)
 }
@@ -707,6 +840,8 @@ func printOpenHelp(w io.Writer) {
 		"  --messages-only        show only user/assistant messages",
 		"  --format text|md|json  output format",
 		"  --out file             write output to file",
+		"  --project name         restrict latest/picker discovery to a project/cwd",
+		"  --since 30d            restrict latest/picker discovery by recency",
 	)
 }
 
@@ -746,14 +881,28 @@ func printSliceHelp(w io.Writer) {
 
 func printSearchHelp(w io.Writer) {
 	writeLines(w,
-		"agentscript search - search latest transcripts",
+		"agentscript search - search Claude Code and Codex transcript history",
 		"",
 		"Usage:",
 		"  agentscript search <query> [flags]",
 		"",
+		"By default all query arguments must match the same block and all discovered history is searched.",
+		"Use --any for OR matching, --near N for multi-block proximity, and --latest N to limit history.",
+		"",
+		"Important flags:",
+		"  --project name         filter by normalized project/cwd",
+		"  --since 30d            filter by date/duration",
+		"  --provider codex       filter provider",
+		"  --limit 20             maximum matching sessions printed",
+		"  --hits 3               maximum hits printed per session",
+		"  --format json          structured output",
+		"  --refresh              refresh the session catalog first",
+		"",
 		"Examples:",
 		"  agentscript search \"r2 cors\"",
-		"  agentscript search publish-pr --provider codex --latest 20",
+		"  agentscript search push rejected --near 20",
+		"  agentscript search permission denied --any --provider codex",
+		"  agentscript search publish-pr --project agentscript --since 90d",
 	)
 }
 
@@ -762,7 +911,7 @@ func printListHelp(w io.Writer) {
 		"agentscript list - list latest discovered transcripts",
 		"",
 		"Usage:",
-		"  agentscript list [--latest 50] [--provider claude|codex]",
+		"  agentscript list [--latest 50] [--provider claude|codex] [--project name] [--since 30d]",
 	)
 }
 
