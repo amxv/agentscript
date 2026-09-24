@@ -11,10 +11,10 @@ summary: How native binaries, GitHub releases, and npm publishing fit together.
 The release workflow runs when a `v*` tag is pushed:
 
 ```bash
-make release-tag VERSION=0.3.0
+make release-tag VERSION=0.3.1
 ```
 
-That creates and pushes `v0.3.0`.
+That creates and pushes `v0.3.1`.
 
 ## What the workflow does
 
