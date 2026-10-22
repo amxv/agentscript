@@ -62,3 +62,7 @@ Release pipeline triggers on `v*` tags and expects:
 - `NPM_TOKEN` GitHub secret present.
 - npm package name in `package.json` is publishable under your account/org.
 - release assets named `<cli>_<goos>_<goarch>[.exe]`.
+
+### Docs deployment
+
+The Docs GitHub Actions workflow deploys production only for the watched site paths; Vercel Git auto-deployments and `ignoreCommand` stay disabled. Keep the project-scoped `VERCEL_TOKEN` Actions secret and ID variables configured. Check Astro locally; builds run in CI.
