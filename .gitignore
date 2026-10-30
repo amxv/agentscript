@@ -1,7 +1,7 @@
 # Build outputs
 /dist
-/bin/*-bin
-/bin/*.exe
+/npm/bin/*-bin
+/npm/bin/*.exe
 
 # Node/npm
 node_modules/
@@ -18,3 +18,5 @@ npm-debug.log*
 /tmp/
 /.agents/gg/queue.md
 .vercel
+/npm/.publish/
+/docs/dist/

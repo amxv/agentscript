@@ -20,9 +20,9 @@ make check
 
 ```bash
 bun install
-bun run docs:dev
-bun run docs:check
-bun run docs:build
+bun run dev
+bun run check
+bun run build
 ```
 
 ## Parser reference

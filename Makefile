@@ -6,10 +6,10 @@ BIN_NAME ?= agentscript
 CMD_PATH ?= ./cmd/$(BIN_NAME)
 DIST_DIR ?= dist
 BIN_PATH ?= $(DIST_DIR)/$(BIN_NAME)
-VERSION ?= $(shell node -p "require('./package.json').version" 2>/dev/null)
+VERSION ?= $(shell node -p "require('./npm/package.json').version" 2>/dev/null)
 LDFLAGS ?= -s -w -X github.com/amxv/agentscript/internal/buildinfo.Version=$(if $(VERSION),$(VERSION),dev)
 
-.PHONY: help fmt test vet lint check build build-all install-local clean release-tag
+.PHONY: help fmt test vet lint check docs-check docs-build build build-all install-local clean release-tag
 
 help:
 	@echo "agentscript command runner"
@@ -27,7 +27,7 @@ help:
 	@echo "  make release-tag  - create and push git tag (requires VERSION=x.y.z)"
 
 fmt:
-	@$(GOFMT) -w $$(find . -type f -name '*.go' -not -path './dist/*')
+	@$(GOFMT) -w $$(find cmd internal -type f -name '*.go')
 
 test:
 	@$(GO) test ./...
@@ -36,9 +36,15 @@ vet:
 	@$(GO) vet ./...
 
 lint:
-	@npm run lint
+	@npm --prefix npm run lint
 
 check: fmt test vet lint
+
+docs-check:
+	@cd docs && bun run check
+
+docs-build:
+	@cd docs && bun run build
 
 build:
 	@mkdir -p $(DIST_DIR)
@@ -61,7 +67,7 @@ install-local: build
 	@echo "Installed $(BIN_NAME) to $$HOME/.local/bin/$(BIN_NAME)"
 
 clean:
-	@rm -rf $(DIST_DIR)
+	@rm -rf $(DIST_DIR) npm/.publish docs/dist docs/.astro .vercel/output
 
 release-tag:
 	@test -n "$(VERSION)" || (echo "Usage: make release-tag VERSION=x.y.z" && exit 1)

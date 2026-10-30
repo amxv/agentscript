@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "astro",
-  "installCommand": "bun install --ignore-scripts",
-  "buildCommand": "bun run docs:build",
-  "outputDirectory": "dist",
+  "installCommand": "cd docs && bun install --frozen-lockfile --ignore-scripts",
+  "buildCommand": "cd docs && bun run build",
+  "outputDirectory": "docs/dist",
   "git": {
     "deploymentEnabled": false
   }

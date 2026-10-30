@@ -6,7 +6,7 @@ Maintainer notes for this template repository.
 
 - Go `1.26+`
 - Node `18+`
-- npm account with publish rights for the package name in `package.json`
+- npm account with publish rights for the package name in `npm/package.json`
 - GitHub repo admin access
 
 ## Local development
@@ -69,7 +69,7 @@ npm whoami
 
 ## Notes on package naming
 
-Before first publish, set a package name you control in `package.json`.
+Before first publish, set a package name you control in `npm/package.json`.
 
 - Example unscoped: `"name": "your-cli-name"`
 - Example scoped: `"name": "@your-scope/your-cli-name"`

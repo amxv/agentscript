@@ -12,10 +12,10 @@ Guidance for coding agents working in `agentscript`.
 - `internal/app/app.go`: command parser, CLI flags, picker, command handlers.
 - `internal/transcript/`: format detection, Claude/Codex parsers, rendering, discovery, search, slicing.
 - `internal/app/app_test.go`: command-level tests.
-- `bin/agentscript.js`: npm shim that invokes packaged native binary.
-- `scripts/postinstall.js`: downloads release binary on install, falls back to `go build`.
+- `npm/bin/agentscript.js`: npm shim that invokes packaged native binary.
+- `npm/scripts/postinstall.js`: downloads release binary on install, falls back to `go build`.
 - `.github/workflows/release.yml`: tag-driven release pipeline.
-- `src/`: ZueDocs-powered Astro documentation site.
+- `docs/`: standalone Astro documentation site; `npm/` contains the published CLI wrapper.
 
 ## Local commands
 
@@ -34,9 +34,9 @@ Direct commands:
 
 - `go test ./...`
 - `go vet ./...`
-- `npm run lint`
-- `bun run docs:check`
-- `bun run docs:build`
+- `npm --prefix npm run lint`
+- `cd docs && bun run check`
+- `cd docs && bun run build`
 
 ## Parser notes
 
@@ -60,7 +60,7 @@ Direct commands:
 Release pipeline triggers on `v*` tags and expects:
 
 - `NPM_TOKEN` GitHub secret present.
-- npm package name in `package.json` is publishable under your account/org.
+- npm package name in `npm/package.json` is publishable under your account/org.
 - release assets named `<cli>_<goos>_<goarch>[.exe]`.
 
 ### Docs deployment

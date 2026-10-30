@@ -39,7 +39,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Node checks
-        run: npm run test
+        run: npm --prefix npm run test
+
+      - name: Verify staged npm Go fallback
+        run: |
+          node npm/scripts/prepare-package.mjs "${GITHUB_REF_NAME#v}"
+          (cd npm/.publish && go build -o "$RUNNER_TEMP/agentscript-fallback" ./cmd/agentscript)
+          npm pack ./npm/.publish --dry-run --ignore-scripts
 
   build-binaries:
     needs: quality
@@ -126,9 +132,9 @@ jobs:
       - name: Set npm version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          VERSION="$VERSION" node -e "const fs=require('fs');const p=require('./package.json');p.version=process.env.VERSION;fs.writeFileSync('package.json', JSON.stringify(p, null, 2)+'\\n');"
+          node npm/scripts/prepare-package.mjs "$VERSION"
 
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish ./npm/.publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

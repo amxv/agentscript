@@ -8,9 +8,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "cmd",
-    "internal",
-    "scripts",
-    "bin"
+    "scripts"
   ]
 }

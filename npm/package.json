@@ -6,7 +6,8 @@
   "author": "amxv",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/amxv/agentscript.git"
+    "url": "git+https://github.com/amxv/agentscript.git",
+    "directory": "npm"
   },
   "homepage": "https://github.com/amxv/agentscript#readme",
   "bugs": {
@@ -25,19 +26,13 @@
     "internal",
     "go.mod",
     "README.md",
-    "LICENSE",
-    "AGENTS.md",
-    "CONTRIBUTORS.md",
-    "Makefile"
+    "LICENSE"
   ],
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "test": "node --check bin/agentscript.js && node --check scripts/postinstall.js",
+    "test": "node --check bin/agentscript.js && node --check scripts/postinstall.js && node --test scripts/prepare-package.test.mjs",
     "lint": "npm run test",
-    "docs:dev": "astro dev",
-    "docs:build": "astro build",
-    "docs:preview": "astro preview",
-    "docs:check": "astro check"
+    "prepare:package": "node scripts/prepare-package.mjs"
   },
   "engines": {
     "node": ">=18"
@@ -51,12 +46,5 @@
     "context-transfer",
     "cli",
     "agent"
-  ],
-  "devDependencies": {
-    "@astrojs/check": "^0.9.4",
-    "@types/node": "^24.0.13",
-    "astro": "^7.0.3",
-    "typescript": "^5.9.2",
-    "zuedocs": "0.1.26"
-  }
+  ]
 }

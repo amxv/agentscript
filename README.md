@@ -2,6 +2,8 @@
 
 `agentscript` is a terminal-first handoff, search, and transcript reader for Claude Code and Codex JSONL sessions.
 
+The Go module stays at the repository root, the Astro site lives in `docs/`, and the npm CLI package is assembled from `npm/` (including a Go source-build fallback).
+
 It makes agent-to-agent context transfer a one-command workflow, while also turning local transcripts into readable indexed blocks for search, inspection, slicing, file/command activity, and export.
 
 ## Install
