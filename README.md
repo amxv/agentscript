@@ -108,6 +108,8 @@ Every renderable block gets a stable index:
 
 Hidden blocks keep their original indexes, so slices remain stable even when you hide thinking or tool output.
 
+Codex shell commands, edits, and tool calls inside code-mode `exec` have their own blocks. Codex progress messages are assistant blocks and remain visible with `--hide-thinking`. Image attachments appear as text markers, and empty tool results still have an indexed header.
+
 Show user-turn numbers too:
 
 ```bash

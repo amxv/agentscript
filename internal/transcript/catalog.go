@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const catalogCacheVersion = 1
+const catalogCacheVersion = 2
 
 var catalogTTL = 30 * time.Second
 
@@ -28,7 +28,8 @@ func DiscoverCached(limit int, provider Provider, roots []string, refresh bool) 
 			return filterAndLimitSessions(sessions, provider, limit), nil
 		}
 	}
-	sessions, err := DiscoverSources(0, provider, sources)
+	// The catalog key is shared by all filters for these sources.
+	sessions, err := DiscoverSources(0, ProviderUnknown, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ func catalogCachePath(sources []SessionSource) string {
 		parts = append(parts, string(source.Provider)+"="+filepath.Clean(expandHome(source.Path)))
 	}
 	sort.Strings(parts)
-	return filepath.Join(cacheBaseDir(), "catalog-v1", cacheKey(strings.Join(parts, "\n"))+".json")
+	return filepath.Join(cacheBaseDir(), "catalog-v2", cacheKey(strings.Join(parts, "\n"))+".json")
 }
 
 func loadCatalog(path string, sources []SessionSource) ([]Session, bool) {

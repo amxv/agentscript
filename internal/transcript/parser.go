@@ -36,12 +36,15 @@ type contentBlock struct {
 	ToolUseID string          `json:"tool_use_id"`
 	Content   json.RawMessage `json:"content"`
 	IsError   bool            `json:"is_error"`
+	ToolName  string          `json:"tool_name"`
 }
 
 type pendingTool struct {
 	Name string
 	Kind Kind
 }
+
+const imageAttachment = "[Image attachment]"
 
 func ParseFile(path string) (Transcript, error) {
 	path = NormalizeTranscriptPath(path)
@@ -78,7 +81,7 @@ func finish(provider Provider, blocks []Block) Transcript {
 		if provider == ProviderCodex && len(out) > 0 && duplicateCodexUserTransport(out[len(out)-1], b) {
 			continue
 		}
-		if strings.TrimSpace(b.Text) == "" && b.Kind != KindToolCall && b.Kind != KindCommand {
+		if strings.TrimSpace(b.Text) == "" && !isToolish(b.Kind) {
 			continue
 		}
 		if b.Kind == KindUser {
@@ -153,24 +156,21 @@ func Detect(data []byte) Provider {
 }
 
 func parseClaude(data []byte) ([]Block, error) {
-	entries, err := readJSONLines(data)
-	if err != nil {
-		return nil, err
-	}
 	var blocks []Block
 	pending := map[string]pendingTool{}
 	seenToolIDs := map[string]bool{}
 
-	for _, entry := range entries {
+	err := scanJSONLines(data, func(entry jsonLine) {
 		if entry.Type != "user" && entry.Type != "assistant" {
-			continue
-		}
-		role := entry.Type
-		if entry.Message != nil && entry.Message.Role != "" {
-			role = entry.Message.Role
+			return
 		}
 		if entry.Message == nil {
-			continue
+			return
+		}
+		entry.Raw = bytes.Clone(entry.Raw)
+		role := entry.Message.Role
+		if role == "" {
+			role = entry.Type
 		}
 		switch role {
 		case "user":
@@ -180,7 +180,7 @@ func parseClaude(data []byte) ([]Block, error) {
 				if text != "" {
 					blocks = append(blocks, Block{Kind: KindUser, Role: "user", Text: text, Timestamp: entry.Timestamp, Raw: entry.Raw})
 				}
-				continue
+				return
 			}
 			arr := decodeContentArray(c)
 			var textParts []string
@@ -198,6 +198,8 @@ func parseClaude(data []byte) ([]Block, error) {
 					if strings.TrimSpace(cb.Text) != "" {
 						textParts = append(textParts, cb.Text)
 					}
+				case "image":
+					textParts = append(textParts, imageAttachment)
 				}
 			}
 			if len(textParts) > 0 {
@@ -215,6 +217,8 @@ func parseClaude(data []byte) ([]Block, error) {
 					if text != "" && text != "No response requested." {
 						blocks = append(blocks, Block{Kind: KindAssistant, Role: "assistant", Text: text, Timestamp: entry.Timestamp, Raw: entry.Raw})
 					}
+				case "image":
+					blocks = append(blocks, Block{Kind: KindAssistant, Role: "assistant", Text: imageAttachment, Timestamp: entry.Timestamp, Raw: entry.Raw})
 				case "thinking":
 					text := strings.TrimSpace(cb.Thinking)
 					if text != "" {
@@ -235,6 +239,9 @@ func parseClaude(data []byte) ([]Block, error) {
 				}
 			}
 		}
+	})
+	if err != nil {
+		return nil, err
 	}
 	return blocks, nil
 }
@@ -291,9 +298,7 @@ func parseCodexNew(entries []jsonLine) []Block {
 			cmd := cleanShellCommand(stringValue(item["command"]))
 			blocks = append(blocks, Block{Kind: KindCommand, Role: "assistant", ToolID: id, ToolName: "Bash", ToolInput: map[string]any{"command": cmd}, Timestamp: entry.Timestamp, Raw: entry.Raw})
 			out := strings.TrimSpace(stringValue(item["aggregated_output"]))
-			if out != "" {
-				blocks = append(blocks, Block{Kind: KindCommandResult, Role: "tool", ToolID: id, ToolName: "Bash", Text: out, Timestamp: entry.Timestamp, IsError: numberValue(item["exit_code"]) != 0, Raw: entry.Raw})
-			}
+			blocks = append(blocks, resultBlockFor(id, pendingTool{Name: "Bash", Kind: KindCommand}, out, entry.Timestamp, codexItemFailed(item), entry.Raw))
 		case "function_call":
 			id := stringValue(item["id"])
 			if id == "" {
@@ -304,9 +309,9 @@ func parseCodexNew(entries []jsonLine) []Block {
 			kind, displayName, input := codexCallShape(name, args)
 			blocks = append(blocks, Block{Kind: kind, Role: "assistant", ToolID: id, ToolName: displayName, ToolInput: input, Timestamp: entry.Timestamp, IsError: stringValue(item["status"]) == "failed", Raw: entry.Raw})
 			pending[id] = pendingTool{Name: displayName, Kind: kind}
-			out := strings.TrimSpace(stringValue(item["output"]))
-			if out != "" {
-				blocks = append(blocks, resultBlockFor(id, pending[id], out, entry.Timestamp, stringValue(item["status"]) == "failed", entry.Raw))
+			if output, ok := item["output"]; ok && output != nil {
+				out, exitCode := customToolOutput(output)
+				blocks = append(blocks, resultBlockFor(id, pending[id], out, entry.Timestamp, codexItemFailed(item) || exitCode != 0, entry.Raw))
 			}
 		}
 	}
@@ -316,6 +321,9 @@ func parseCodexNew(entries []jsonLine) []Block {
 func parseCodexLegacy(entries []jsonLine) []Block {
 	var blocks []Block
 	pending := map[string]pendingTool{}
+	directResults := map[string]bool{}
+	seenEvents := map[string]bool{}
+	var eventBlocks []int
 	inTurn := false
 	for _, entry := range entries {
 		switch entry.Type {
@@ -333,6 +341,20 @@ func parseCodexLegacy(entries []jsonLine) []Block {
 				text := extractCodexUserText(stringValue(payload["message"]))
 				if text != "" {
 					blocks = append(blocks, Block{Kind: KindUser, Role: "user", Text: text, Timestamp: entry.Timestamp, Raw: entry.Raw})
+				}
+			case "item_completed":
+				item := mapValue(payload["item"])
+				id := stringValue(item["id"])
+				if id != "" && seenEvents[id] {
+					continue
+				}
+				activity := codexCompletedToolBlocks(entry, item)
+				if len(activity) > 0 {
+					if id != "" {
+						eventBlocks = append(eventBlocks, len(blocks))
+						seenEvents[id] = true
+					}
+					blocks = append(blocks, activity...)
 				}
 			}
 		case "response_item":
@@ -357,11 +379,7 @@ func parseCodexLegacy(entries []jsonLine) []Block {
 				if role == "user" {
 					blocks = append(blocks, Block{Kind: KindUser, Role: "user", Text: extractCodexUserText(text), Timestamp: entry.Timestamp, Raw: entry.Raw})
 				} else if role == "assistant" {
-					kind := KindAssistant
-					if stringValue(payload["phase"]) == "commentary" {
-						kind = KindThinking
-					}
-					blocks = append(blocks, Block{Kind: kind, Role: "assistant", Text: text, Timestamp: entry.Timestamp, Raw: entry.Raw})
+					blocks = append(blocks, Block{Kind: KindAssistant, Role: "assistant", Text: text, Timestamp: entry.Timestamp, Raw: entry.Raw})
 				}
 			case "reasoning":
 				text := reasoningText(payload)
@@ -373,11 +391,6 @@ func parseCodexLegacy(entries []jsonLine) []Block {
 				kind, displayName, input := codexCallShape(stringValue(payload["name"]), stringValue(payload["arguments"]))
 				blocks = append(blocks, Block{Kind: kind, Role: "assistant", ToolID: id, ToolName: displayName, ToolInput: input, Timestamp: entry.Timestamp, Raw: entry.Raw})
 				pending[id] = pendingTool{Name: displayName, Kind: kind}
-			case "function_call_output":
-				id := stringValue(payload["call_id"])
-				out := cleanCodexOutput(stringValue(payload["output"]))
-				pt := pending[id]
-				blocks = append(blocks, resultBlockFor(id, pt, out, entry.Timestamp, strings.Contains(stringValue(payload["output"]), "Process exited with code") && !strings.Contains(stringValue(payload["output"]), "code 0"), entry.Raw))
 			case "custom_tool_call":
 				id := stringValue(payload["call_id"])
 				name := stringValue(payload["name"])
@@ -385,19 +398,43 @@ func parseCodexLegacy(entries []jsonLine) []Block {
 				kind, displayName, input := codexCustomToolShape(name, inputText)
 				blocks = append(blocks, Block{Kind: kind, Role: "assistant", ToolID: id, ToolName: displayName, ToolInput: input, Timestamp: entry.Timestamp, Raw: entry.Raw})
 				pending[id] = pendingTool{Name: displayName, Kind: kind}
-			case "custom_tool_call_output":
+			case "function_call_output", "custom_tool_call_output":
 				id := stringValue(payload["call_id"])
+				if id == "" {
+					id = stringValue(payload["id"])
+				}
+				directResults[id] = true
 				out, exitCode := customToolOutput(payload["output"])
 				pt := pending[id]
-				blocks = append(blocks, resultBlockFor(id, pt, out, entry.Timestamp, exitCode != 0, entry.Raw))
+				if name := stringValue(payload["name"]); pt.Name == "" && name != "" {
+					pt = pendingTool{Name: name, Kind: toolCallKind(name)}
+				}
+				failed := exitCode != 0
+				if raw, ok := payload["output"].(string); ok && ptype == "function_call_output" {
+					out = cleanCodexOutput(raw)
+					failed = strings.Contains(raw, "Process exited with code") && !strings.Contains(raw, "code 0")
+				}
+				blocks = append(blocks, resultBlockFor(id, pt, out, entry.Timestamp, failed, entry.Raw))
 			}
 		}
 	}
-	return blocks
+	return mergeCodexToolActivity(blocks, eventBlocks, pending, directResults)
 }
 
 func readJSONLines(data []byte) ([]jsonLine, error) {
 	var entries []jsonLine
+	err := scanJSONLines(data, func(entry jsonLine) {
+		entry.Raw = bytes.Clone(entry.Raw)
+		entries = append(entries, entry)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// scanJSONLines lends the raw bytes to visit until the next scan.
+func scanJSONLines(data []byte, visit func(jsonLine)) error {
 	s := bufio.NewScanner(bytes.NewReader(data))
 	buf := make([]byte, 0, 1024*1024)
 	s.Buffer(buf, 32*1024*1024)
@@ -412,14 +449,11 @@ func readJSONLines(data []byte) ([]jsonLine, error) {
 		if err := json.Unmarshal(line, &entry); err != nil {
 			continue
 		}
-		entry.Raw = append(json.RawMessage(nil), line...)
+		entry.Raw = line
 		entry.Line = lineNumber
-		entries = append(entries, entry)
+		visit(entry)
 	}
-	if err := s.Err(); err != nil {
-		return nil, err
-	}
-	return entries, nil
+	return s.Err()
 }
 
 func decodeContentArray(raw json.RawMessage) []contentBlock {
@@ -451,8 +485,15 @@ func toolResultText(raw json.RawMessage) string {
 	if json.Unmarshal(raw, &parts) == nil {
 		texts := make([]string, 0, len(parts))
 		for _, p := range parts {
-			if p.Type == "text" && p.Text != "" {
-				texts = append(texts, p.Text)
+			switch p.Type {
+			case "text":
+				if p.Text != "" {
+					texts = append(texts, p.Text)
+				}
+			case "image":
+				texts = append(texts, imageAttachment)
+			case "tool_reference":
+				texts = append(texts, "[Tool reference: "+p.ToolName+"]")
 			}
 		}
 		return strings.Join(texts, "\n")
@@ -550,9 +591,16 @@ func parseCodexPatch(patch string) map[string]any {
 
 func customToolOutput(v any) (string, int) {
 	switch x := v.(type) {
+	case nil:
+		return "", 0
 	case string:
 		return strings.TrimSpace(x), 0
+	case []any:
+		return codexResultContent(x), 0
 	case map[string]any:
+		if _, ok := x["output"]; !ok {
+			return stringValue(x), 0
+		}
 		out := stringValue(x["output"])
 		exitCode := 0
 		if md, ok := x["metadata"].(map[string]any); ok {
@@ -577,10 +625,11 @@ func textFromCodexContent(v any, input bool) string {
 			continue
 		}
 		t := stringValue(m["type"])
-		if input && t == "input_text" {
+		switch {
+		case input && t == "input_text", !input && t == "output_text":
 			parts = append(parts, stringValue(m["text"]))
-		} else if !input && t == "output_text" {
-			parts = append(parts, stringValue(m["text"]))
+		case t == "input_image", t == "output_image":
+			parts = append(parts, imageAttachment)
 		}
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n"))
@@ -590,23 +639,16 @@ func reasoningText(m map[string]any) string {
 	if text := strings.TrimSpace(stringValue(m["text"])); text != "" {
 		return text
 	}
-	if content := strings.TrimSpace(stringValue(m["content"])); content != "" {
+	if content, ok := m["content"].(string); ok && strings.TrimSpace(content) != "" {
 		return content
 	}
-	if summary, ok := m["summary"].([]any); ok && len(summary) > 0 {
-		var parts []string
-		for _, item := range summary {
-			if s := strings.TrimSpace(stringValue(item)); s != "" {
-				parts = append(parts, s)
-			} else if mm, ok := item.(map[string]any); ok {
-				if s := strings.TrimSpace(stringValue(mm["text"])); s != "" {
-					parts = append(parts, s)
-				}
-			}
+	if summary, _ := m["summary"].([]any); len(summary) > 0 {
+		if text := codexResultContent(summary); text != "" {
+			return text
 		}
-		return strings.Join(parts, "\n")
 	}
-	return ""
+	content, _ := m["content"].([]any)
+	return codexResultContent(content)
 }
 
 func extractCodexUserText(text string) string {

@@ -17,7 +17,7 @@ import (
 	"sync"
 )
 
-const searchCacheVersion = 2
+const searchCacheVersion = 3
 
 type searchCacheEntry struct {
 	Version     int     `json:"version"`

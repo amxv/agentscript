@@ -1,0 +1,7 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Check this diagram."},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAA="}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"read","name":"Read","input":{"file_path":"example.png"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"read","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAA="}}]}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"search","name":"ToolSearch","input":{"query":"example"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"search","content":[{"type":"tool_reference","tool_name":"mcp__example__lookup"}]}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"command","name":"Bash","input":{"command":"true"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"command","content":""}]}}

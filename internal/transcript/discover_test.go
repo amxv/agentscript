@@ -89,6 +89,36 @@ func TestDefaultRootsFallBackWhenEnvironmentDirsAreMissing(t *testing.T) {
 	}
 }
 
+func TestDiscoveryCatalogSupportsSwitchingProvidersWithCustomConfigDirs(t *testing.T) {
+	root := t.TempDir()
+	claudeConfig, codexHome := filepath.Join(root, "claude"), filepath.Join(root, "codex")
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeConfig)
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("AGENTSCRIPT_CACHE_DIR", t.TempDir())
+	for _, dir := range []string{filepath.Join(claudeConfig, "projects"), filepath.Join(codexHome, "sessions")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "session.jsonl"), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, provider := range []Provider{ProviderClaude, ProviderCodex, ProviderUnknown} {
+		sessions, err := DiscoverCached(0, provider, nil, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if provider == ProviderUnknown {
+			if len(sessions) != 2 {
+				t.Fatalf("got %d unfiltered sessions, want 2", len(sessions))
+			}
+		} else if len(sessions) != 1 || sessions[0].Provider != provider {
+			t.Fatalf("discovery for %s returned %+v", provider, sessions)
+		}
+	}
+}
+
 func TestDiscoverKeepsProviderFromConfiguredSource(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".gg", "codex", "sessions")
 	if err := os.MkdirAll(root, 0o755); err != nil {

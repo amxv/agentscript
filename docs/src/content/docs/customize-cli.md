@@ -22,6 +22,8 @@ agentscript parses Claude Code and Codex sessions into one stream of renderable 
 
 Indexes are assigned before filtering. This means `--hide-thinking` may show gaps, but the visible blocks still keep their original indexes.
 
+Codex shell commands, edits, and tool calls inside code-mode `exec` have separate call and result blocks. Codex progress messages count as assistant messages. Image attachments appear as text markers, and tool results keep their index even when they have no text.
+
 ## Turns
 
 A turn starts at each user message. Use `--turns` to display turn numbers:

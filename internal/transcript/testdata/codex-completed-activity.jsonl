@@ -1,0 +1,15 @@
+{"type":"session_meta","payload":{}}
+{"type":"event_msg","payload":{"type":"task_started"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,AAA="}]}}
+{"type":"response_item","payload":{"type":"reasoning","id":"reasoning","summary":[{"type":"summary_text","text":"Inspect the example."}],"encrypted_content":"opaque"}}
+{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"Reasoning","id":"reasoning","summary_text":["Inspect the example."]}}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"I will check the example."}]}}
+{"type":"response_item","payload":{"type":"custom_tool_call","name":"exec","call_id":"script","input":"text(await tools.example({}));"}}
+{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"CommandExecution","id":"shell","command":["/bin/zsh","-lc","exit 2"],"cwd":"/example folder","aggregated_output":"","exit_code":2,"status":"failed"}}}
+{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"DynamicToolCall","id":"dynamic","tool":"example","arguments":{"sample":1},"content_items":[{"type":"inputText","text":"dynamic output"}],"status":"completed","success":true}}}
+{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"FileChange","id":"edit","changes":{"example.txt":{"type":"Add","content":"example"}},"stdout":"updated","stderr":"","status":"completed"}}}
+{"type":"event_msg","payload":{"type":"item_completed","item":{"type":"McpToolCall","id":"mcp","server":"example","tool":"lookup","arguments":{},"result":{"content":[{"type":"text","text":"not found"}],"isError":true},"status":"completed"}}}
+{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"script","output":[{"type":"input_text","text":"first line"},{"type":"input_text","text":"second line"}]}}
+{"type":"response_item","payload":{"type":"function_call_output","id":"selection","name":"example_selection","output":"selected example"}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"Done."}]}}
+{"type":"event_msg","payload":{"type":"task_complete"}}
