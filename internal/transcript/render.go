@@ -24,27 +24,34 @@ var internalContextPatterns = []*regexp.Regexp{
 
 func Render(w io.Writer, tr Transcript, opts RenderOptions) error {
 	blocks := FilterBlocks(tr.Blocks, opts)
+	return renderPage(w, tr, blocks, opts, nil)
+}
+
+func renderPage(w io.Writer, tr Transcript, blocks []Block, opts RenderOptions, next *continuation) error {
 	switch opts.normalizedFormat() {
 	case "json":
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(struct {
-			Path     string   `json:"path,omitempty"`
-			Provider Provider `json:"provider"`
-			Blocks   []Block  `json:"blocks"`
-		}{Path: tr.Path, Provider: tr.Provider, Blocks: blocks})
+			Path     string        `json:"path,omitempty"`
+			Provider Provider      `json:"provider"`
+			Blocks   []Block       `json:"blocks"`
+			Next     *continuation `json:"next,omitempty"`
+		}{Path: tr.Path, Provider: tr.Provider, Blocks: blocks, Next: next})
 	case "md", "markdown":
 		renderMarkdown(w, tr, blocks, opts)
-		return nil
 	case "html":
-		renderHTML(w, tr, blocks, opts)
-		return nil
+		renderHTML(w, tr, blocks, opts, next)
 	case "text", "plain", "":
 		renderText(w, tr, blocks, opts)
-		return nil
 	default:
 		return fmt.Errorf("unsupported format %q", opts.Format)
 	}
+	if next != nil && opts.normalizedFormat() != "html" {
+		_, err := fmt.Fprintf(w, "Continue at #%03d: %s\n", next.Index, next.Command)
+		return err
+	}
+	return nil
 }
 
 func FilterBlocks(blocks []Block, opts RenderOptions) []Block {
@@ -115,25 +122,26 @@ func renderText(w io.Writer, tr Transcript, blocks []Block, opts RenderOptions) 
 		_, _ = fmt.Fprintf(w, "agentscript transcript: %s (%s)\n\n", tr.Path, tr.Provider)
 	}
 	for _, b := range blocks {
-		header := blockHeader(b, opts)
-		_, _ = fmt.Fprintln(w, header)
-		body, collapsed := renderedBody(b, tr.Path, opts)
-		if body != "" {
-			_, _ = fmt.Fprintln(w, indentRight(strings.TrimRight(body, "\n"), "  "))
-		}
-		if collapsed {
-			_, _ = fmt.Fprintf(w, "  expand: agentscript open %q --around %d --expand %d\n", tr.Path, b.Index, b.Index)
-		}
-		_, _ = fmt.Fprintln(w)
+		renderTextBlock(w, tr, b, opts)
 	}
 }
 
-func renderMarkdown(w io.Writer, tr Transcript, blocks []Block, opts RenderOptions) {
-	style := strings.ToLower(strings.TrimSpace(opts.MarkdownStyle))
-	if style == "llm" {
-		style = "llm-context"
+func renderTextBlock(w io.Writer, tr Transcript, b Block, opts RenderOptions) {
+	header := blockHeader(b, opts)
+	_, _ = fmt.Fprintln(w, header)
+	body, collapsed := renderedBody(b, tr.Path, opts)
+	if body != "" {
+		_, _ = fmt.Fprintln(w, indentRight(strings.TrimRight(body, "\n"), "  "))
 	}
-	if style == "llm-context" {
+	if collapsed {
+		_, _ = fmt.Fprintf(w, "  expand: agentscript open %q --around %d --expand %d\n", tr.Path, b.Index, b.Index)
+	}
+	_, _ = fmt.Fprintln(w)
+}
+
+func renderMarkdown(w io.Writer, tr Transcript, blocks []Block, opts RenderOptions) {
+	style := markdownStyle(opts)
+	if style == "llm-context" || style == "llm" {
 		_, _ = fmt.Fprintf(w, "# Transcript context\n\n")
 		_, _ = fmt.Fprintf(w, "Source: `%s`\nProvider: `%s`\n\n", tr.Path, tr.Provider)
 	} else if style == "audit" {
@@ -146,53 +154,68 @@ func renderMarkdown(w io.Writer, tr Transcript, blocks []Block, opts RenderOptio
 		_, _ = fmt.Fprintf(w, "\n\nProvider: `%s`\n\n", tr.Provider)
 	}
 	for _, b := range blocks {
-		if style == "compact" {
-			_, _ = fmt.Fprintf(w, "### %s\n\n", markdownHeader(b, opts))
-		} else {
-			_, _ = fmt.Fprintf(w, "## %s\n\n", markdownHeader(b, opts))
-		}
-		body, collapsed := renderedBody(b, tr.Path, opts)
-		if body == "" {
-			body = toolInputText(b)
-		}
-		if b.Kind == KindCommand || b.Kind == KindCommandResult || b.Kind == KindToolCall || b.Kind == KindToolResult {
-			_, _ = fmt.Fprintf(w, "```text\n%s\n```\n", strings.TrimRight(body, "\n"))
-		} else {
-			_, _ = fmt.Fprintf(w, "%s\n", body)
-		}
-		if collapsed {
-			_, _ = fmt.Fprintf(w, "\n_expand with:_ `agentscript open %q --around %d --expand %d`\n", tr.Path, b.Index, b.Index)
-		}
-		_, _ = fmt.Fprintln(w)
+		renderMarkdownBlock(w, tr, b, opts, style)
 	}
 }
 
-func renderHTML(w io.Writer, tr Transcript, blocks []Block, opts RenderOptions) {
+func markdownStyle(opts RenderOptions) string {
+	return strings.ToLower(strings.TrimSpace(opts.MarkdownStyle))
+}
+
+func renderMarkdownBlock(w io.Writer, tr Transcript, b Block, opts RenderOptions, style string) {
+	if style == "compact" {
+		_, _ = fmt.Fprintf(w, "### %s\n\n", markdownHeader(b, opts))
+	} else {
+		_, _ = fmt.Fprintf(w, "## %s\n\n", markdownHeader(b, opts))
+	}
+	body, collapsed := renderedBody(b, tr.Path, opts)
+	if body == "" {
+		body = toolInputText(b)
+	}
+	if b.Kind == KindCommand || b.Kind == KindCommandResult || b.Kind == KindToolCall || b.Kind == KindToolResult {
+		_, _ = fmt.Fprintf(w, "```text\n%s\n```\n", strings.TrimRight(body, "\n"))
+	} else {
+		_, _ = fmt.Fprintf(w, "%s\n", body)
+	}
+	if collapsed {
+		_, _ = fmt.Fprintf(w, "\n_expand with:_ `agentscript open %q --around %d --expand %d`\n", tr.Path, b.Index, b.Index)
+	}
+	_, _ = fmt.Fprintln(w)
+}
+
+func renderHTML(w io.Writer, tr Transcript, blocks []Block, opts RenderOptions, next *continuation) {
 	_, _ = fmt.Fprintf(w, "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>agentscript transcript</title><style>%s</style></head><body>", htmlCSS())
 	_, _ = fmt.Fprintf(w, "<header><h1>agentscript transcript</h1><p><code>%s</code> · <strong>%s</strong> · %d blocks</p><input id=\"q\" placeholder=\"Search visible blocks…\" oninput=\"filterBlocks()\"></header><main>", html.EscapeString(tr.Path), html.EscapeString(string(tr.Provider)), len(blocks))
 	for _, b := range blocks {
-		body, collapsed := renderedBody(b, tr.Path, opts)
-		classes := "block kind-" + strings.ReplaceAll(string(b.Kind), "_", "-")
-		_, _ = fmt.Fprintf(w, "<section class=\"%s\" data-search=\"%s\">", classes, html.EscapeString(strings.ToLower(blockHeader(b, opts)+" "+body)))
-		_, _ = fmt.Fprintf(w, "<div class=\"block-head\"><a id=\"b%d\" href=\"#b%d\">#%03d</a><span>%s</span>", b.Index, b.Index, b.Index, html.EscapeString(string(b.Kind)))
-		if b.ToolName != "" {
-			_, _ = fmt.Fprintf(w, "<span>%s</span>", html.EscapeString(b.ToolName))
-		}
-		if opts.ShowTurns && b.Turn > 0 {
-			_, _ = fmt.Fprintf(w, "<span>turn:%d</span>", b.Turn)
-		}
-		if b.IsError {
-			_, _ = fmt.Fprintf(w, "<span class=\"err\">ERROR</span>")
-		}
-		_, _ = fmt.Fprint(w, "</div>")
-		if collapsed {
-			_, _ = fmt.Fprintf(w, "<details><summary>Collapsed to %d lines. Expand block.</summary><pre>%s</pre></details>", opts.MaxLines, html.EscapeString(blockBodyText(b)))
-		} else {
-			_, _ = fmt.Fprintf(w, "<pre>%s</pre>", html.EscapeString(body))
-		}
-		_, _ = fmt.Fprint(w, "</section>")
+		renderHTMLBlock(w, tr, b, opts)
+	}
+	if next != nil {
+		_, _ = fmt.Fprintf(w, "<p>Continue at #%03d: <code>%s</code></p>", next.Index, html.EscapeString(next.Command))
 	}
 	_, _ = fmt.Fprintf(w, "</main><script>%s</script></body></html>", htmlJS())
+}
+
+func renderHTMLBlock(w io.Writer, tr Transcript, b Block, opts RenderOptions) {
+	body, collapsed := renderedBody(b, tr.Path, opts)
+	classes := "block kind-" + strings.ReplaceAll(string(b.Kind), "_", "-")
+	_, _ = fmt.Fprintf(w, "<section class=\"%s\" data-search=\"%s\">", classes, html.EscapeString(strings.ToLower(blockHeader(b, opts)+" "+body)))
+	_, _ = fmt.Fprintf(w, "<div class=\"block-head\"><a id=\"b%d\" href=\"#b%d\">#%03d</a><span>%s</span>", b.Index, b.Index, b.Index, html.EscapeString(string(b.Kind)))
+	if b.ToolName != "" {
+		_, _ = fmt.Fprintf(w, "<span>%s</span>", html.EscapeString(b.ToolName))
+	}
+	if opts.ShowTurns && b.Turn > 0 {
+		_, _ = fmt.Fprintf(w, "<span>turn:%d</span>", b.Turn)
+	}
+	if b.IsError {
+		_, _ = fmt.Fprintf(w, "<span class=\"err\">ERROR</span>")
+	}
+	_, _ = fmt.Fprint(w, "</div>")
+	if collapsed {
+		_, _ = fmt.Fprintf(w, "<details><summary>Collapsed to %d lines. Expand block.</summary><pre>%s</pre></details>", opts.MaxLines, html.EscapeString(blockBodyText(b)))
+	} else {
+		_, _ = fmt.Fprintf(w, "<pre>%s</pre>", html.EscapeString(body))
+	}
+	_, _ = fmt.Fprint(w, "</section>")
 }
 
 func renderedBody(b Block, path string, opts RenderOptions) (string, bool) {

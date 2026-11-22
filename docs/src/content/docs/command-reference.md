@@ -48,6 +48,8 @@ agentscript open --path <path> [flags]
 agentscript open --latest 1 [flags]
 ```
 
+On Windows, use drive paths, UNC paths, and extended paths such as `\\?\C:\logs\session.jsonl`. Use `file:///C:/logs/session.jsonl` for a drive or `file://server/share/session.jsonl` for a share. The same input syntax works for other commands that take transcript paths.
+
 Discovery filters:
 
 ```bash
@@ -77,6 +79,7 @@ Common flags:
 --timestamps
 --turns
 --max-lines 40
+--max-chars 20000
 --expand 120
 --expand all
 --format text|md|html|json
@@ -90,6 +93,8 @@ Common flags:
 agentscript slice <path> 0:100
 agentscript slice <path> 100:
 agentscript slice <path> :50
+agentscript slice <path> --last 80
+agentscript slice <path> --last-turns 3
 ```
 
 Equivalent `open` flags:
@@ -98,6 +103,7 @@ Equivalent `open` flags:
 agentscript open transcript.jsonl --slice 0:100
 agentscript open transcript.jsonl --from 0 --to 100
 agentscript open transcript.jsonl --last 80
+agentscript open transcript.jsonl --last-turns 3
 agentscript open transcript.jsonl --around 100 --before 25 --after 50
 ```
 
@@ -106,6 +112,17 @@ Turn slicing:
 ```bash
 agentscript open transcript.jsonl --turns --turn-slice 2:4
 ```
+
+`--last N` counts blocks and `--last-turns N` counts numbered user turns. Both select before display filters and keep stable indexes. Use a tail flag in place of the range with `slice`. Use `--last-turns` on its own as the selection with `open`.
+
+Page the output of either command:
+
+```bash
+agentscript open transcript.jsonl --last-turns 3 --max-chars 20000 --format json
+agentscript slice transcript.jsonl 100:300 --max-chars 20000 --hide-thinking
+```
+
+`--max-chars N` limits rendered characters at block boundaries. The default, `0`, is unlimited. When a block is omitted, the output includes an `agentscript open --path … --slice START:END --max-chars N …` command. It resumes at the omitted block, keeps the original end index and rendering flags, and writes to stdout. JSON emits a `next` object with `index` and `command` only when more blocks remain. The budget excludes continuation metadata. Minimum format framing is always emitted, and a continuation on an empty page raises the budget when necessary to fit the first omitted block.
 
 ## Search
 

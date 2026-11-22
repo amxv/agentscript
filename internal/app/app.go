@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -225,8 +224,6 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 
 	var c commonFlags
 	var pathFlag string
-	var sliceSpec string
-	var turnSlice string
 	var latest int
 	var provider string
 	var roots string
@@ -234,21 +231,22 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 	var since string
 	var noTUI bool
 	var refresh bool
-	from, to, last, around, before, after := -1, -1, 0, -1, 25, 50
+	var selection blockSelection
+	var page pageFlags
 
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	addCommonFlags(fs, &c)
+	addPageFlags(fs, &page, &selection)
 	fs.StringVar(&pathFlag, "path", "", "path to a Claude Code or Codex JSONL transcript")
 	fs.StringVar(&pathFlag, "p", "", "alias for --path")
-	fs.StringVar(&sliceSpec, "slice", "", "slice by stable block index, e.g. 0:100, 100:, :50")
-	fs.StringVar(&turnSlice, "turn-slice", "", "slice by user-turn number, e.g. 1:5")
-	fs.IntVar(&from, "from", -1, "slice start block index")
-	fs.IntVar(&to, "to", -1, "slice end block index, inclusive")
-	fs.IntVar(&last, "last", 0, "show the last N renderable blocks")
-	fs.IntVar(&around, "around", -1, "show blocks around this index")
-	fs.IntVar(&before, "before", 25, "number of blocks before --around")
-	fs.IntVar(&after, "after", 50, "number of blocks after --around")
+	fs.StringVar(&selection.slice, "slice", "", "slice by stable block index, e.g. 0:100, 100:, :50")
+	fs.StringVar(&selection.turnSlice, "turn-slice", "", "slice by user-turn number, e.g. 1:5")
+	fs.IntVar(&selection.from, "from", -1, "slice start block index")
+	fs.IntVar(&selection.to, "to", -1, "slice end block index, inclusive")
+	fs.IntVar(&selection.around, "around", -1, "show blocks around this index")
+	fs.IntVar(&selection.before, "before", 25, "number of blocks before --around")
+	fs.IntVar(&selection.after, "after", 50, "number of blocks after --around")
 	fs.IntVar(&latest, "latest", 0, "open the Nth latest transcript; 1 is most recent")
 	fs.StringVar(&provider, "provider", "", "provider filter for latest/picker: claude or codex")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery and session ID lookup")
@@ -266,6 +264,9 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 			printOpenHelp(stdout)
 		}
 		return nil
+	}
+	if err := page.validate(selection); err != nil {
+		return err
 	}
 	path := pathFlag
 	if fs.NArg() > 0 {
@@ -323,21 +324,39 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 			path = picked.Path
 		}
 	}
-	return renderPath(path, stdout, c, sliceSpec, turnSlice, from, to, last, around, before, after)
+	return renderPath(path, stdout, c, selection, page, fs)
 }
 
 func runSlice(args []string, stdout io.Writer) error {
-	var c commonFlags
-	fs := flag.NewFlagSet("slice", flag.ContinueOnError)
-	addCommonFlags(fs, &c)
-	if err := fs.Parse(interspersed(args, commonValueFlags())); err != nil {
-		return err
-	}
-	if fs.NArg() < 2 || isHelpArg(fs.Arg(0)) {
+	if len(args) == 1 && isHelpArg(args[0]) {
 		printSliceHelp(stdout)
 		return nil
 	}
-	return renderPath(fs.Arg(0), stdout, c, fs.Arg(1), "", -1, -1, 0, -1, 25, 50)
+	var c commonFlags
+	selection := newBlockSelection()
+	var page pageFlags
+	fs := flag.NewFlagSet("slice", flag.ContinueOnError)
+	addCommonFlags(fs, &c)
+	addPageFlags(fs, &page, &selection)
+	if err := fs.Parse(interspersed(args, pageValueFlags())); err != nil {
+		return err
+	}
+	if fs.NArg() == 0 || isHelpArg(fs.Arg(0)) {
+		printSliceHelp(stdout)
+		return nil
+	}
+	selection.slice = fs.Arg(1)
+	if err := page.validate(selection); err != nil {
+		return err
+	}
+	if selection.slice == "" && selection.last == 0 && selection.lastTurns == 0 {
+		printSliceHelp(stdout)
+		return nil
+	}
+	if selection.slice != "" && selection.last > 0 {
+		return errors.New("use a block range or --last")
+	}
+	return renderPath(fs.Arg(0), stdout, c, selection, page, fs)
 }
 
 func runList(args []string, stdout io.Writer) error {
@@ -518,37 +537,26 @@ func runSearch(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func renderPath(path string, stdout io.Writer, c commonFlags, sliceSpec, turnSlice string, from, to, last, around, before, after int) error {
+func renderPath(path string, stdout io.Writer, c commonFlags, selection blockSelection, page pageFlags, fs *flag.FlagSet) error {
 	tr, err := transcript.ParseFile(path)
 	if err != nil {
 		return err
 	}
-	if sliceSpec == "" && (from >= 0 || to >= 0) {
-		left, right := "", ""
-		if from >= 0 {
-			left = strconv.Itoa(from)
-		}
-		if to >= 0 {
-			right = strconv.Itoa(to)
-		}
-		sliceSpec = left + ":" + right
+	tr.Blocks, err = selection.selectBlocks(tr.Blocks)
+	if err != nil {
+		return err
 	}
-	if turnSlice != "" {
-		spec, err := transcript.ParseSliceSpec(turnSlice)
+	opts, err := c.renderOptions()
+	if err != nil {
+		return err
+	}
+	if page.maxChars > 0 && !filepath.IsAbs(tr.Path) {
+		tr.Path, err = filepath.Abs(tr.Path)
 		if err != nil {
 			return err
 		}
-		tr.Blocks = transcript.SliceBlocksByTurn(tr.Blocks, spec)
-	}
-	if sliceSpec != "" || last > 0 || around >= 0 {
-		spec, err := transcript.ParseSliceSpec(sliceSpec)
-		if err != nil {
-			return err
-		}
-		tr.Blocks = transcript.SliceBlocks(tr.Blocks, spec, last, around, before, after)
 	}
 	writer := stdout
-	var file *os.File
 	if c.out != "" {
 		if err := os.MkdirAll(filepath.Dir(c.out), 0o755); err != nil && filepath.Dir(c.out) != "." {
 			return err
@@ -558,12 +566,10 @@ func renderPath(path string, stdout io.Writer, c commonFlags, sliceSpec, turnSli
 			return err
 		}
 		defer f.Close()
-		file = f
-		writer = file
+		writer = f
 	}
-	opts, err := c.renderOptions()
-	if err != nil {
-		return err
+	if page.maxChars > 0 {
+		return transcript.RenderPage(writer, tr, opts, page.maxChars, page.nextCommand(tr, fs))
 	}
 	return transcript.Render(writer, tr, opts)
 }
@@ -693,8 +699,8 @@ func commonValueFlags() map[string]bool {
 }
 
 func openValueFlags() map[string]bool {
-	m := commonValueFlags()
-	for _, k := range []string{"path", "p", "slice", "turn-slice", "from", "to", "last", "around", "before", "after", "latest", "provider", "roots", "project", "since"} {
+	m := pageValueFlags()
+	for _, k := range []string{"path", "p", "slice", "turn-slice", "from", "to", "around", "before", "after", "latest", "provider", "roots", "project", "since"} {
 		m[k] = true
 	}
 	return m
@@ -786,7 +792,7 @@ func printRootHelp(w io.Writer) {
 		"  handoff <path>    continuation-ready context for another agent (alias: continue)",
 		"  open [path]       open/render a transcript, or pick from latest sessions",
 		"  codex <session-id>  open/render a Codex transcript by session ID",
-		"  slice <path> <range>  render a stable block-index slice like 0:100",
+		"  slice <path> <range>  render a stable block-index range or select a tail",
 		"  search <query>    search Claude/Codex transcript history",
 		"  index             inspect/rebuild the normalized search cache",
 		"  list              list latest discovered transcripts",
@@ -829,7 +835,9 @@ func printOpenHelp(w io.Writer) {
 		"Important flags:",
 		"  --slice 0:100          render block indexes 0 through 100",
 		"  --from 0 --to 100      same as --slice 0:100",
-		"  --last 80              render the last 80 blocks",
+		"  --last 80              select the last 80 blocks before filters",
+		"  --last-turns 3         select the last 3 user turns before filters",
+		"  --max-chars 20000      cap rendered characters and include a continuation if needed",
 		"  --around 100           render around block #100",
 		"  --hide-thinking        hide thinking blocks",
 		"  --show-internal-goal   show Codex internal goal/context blocks",
@@ -838,10 +846,18 @@ func printOpenHelp(w io.Writer) {
 		"  --hide-commands        hide shell commands/results",
 		"  --hide-tool Bash       hide a named tool/command",
 		"  --messages-only        show only user/assistant messages",
-		"  --format text|md|json  output format",
+		"  --format text|md|html|json  output format",
 		"  --out file             write output to file",
 		"  --project name         restrict latest/picker discovery to a project/cwd",
 		"  --since 30d            restrict latest/picker discovery by recency",
+		"",
+		"Use --last-turns as the selection on its own. JSON pages include next.index and next.command when truncated.",
+		"",
+		"Examples:",
+		"  agentscript open transcript.jsonl --last-turns 3 --hide-tool-results",
+		"  agentscript open --max-chars 20000 transcript.jsonl --last 80 --format json",
+		"  agentscript open 'C:\\Users\\me\\session.jsonl' --last 80",
+		"  agentscript open 'file:///C:/Users/me/session.jsonl'",
 	)
 }
 
@@ -868,14 +884,21 @@ func printCodexHelp(w io.Writer) {
 
 func printSliceHelp(w io.Writer) {
 	writeLines(w,
-		"agentscript slice - render a stable block-index range",
+		"agentscript slice - render a stable block-index range or transcript tail",
 		"",
 		"Usage:",
 		"  agentscript slice <path> <range> [flags]",
+		"  agentscript slice <path> --last N [flags]",
+		"  agentscript slice <path> --last-turns N [flags]",
+		"",
+		"Tail selection counts blocks or numbered user turns before display filters.",
+		"Use --max-chars N to page at block boundaries. JSON includes next.index and next.command when truncated.",
 		"",
 		"Examples:",
 		"  agentscript slice transcript.jsonl 0:100",
 		"  agentscript slice transcript.jsonl 100: --out new-task.md --format md",
+		"  agentscript slice transcript.jsonl --last 80 --max-chars 20000",
+		"  agentscript slice --last-turns 3 transcript.jsonl --messages-only",
 	)
 }
 

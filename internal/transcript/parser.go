@@ -45,6 +45,7 @@ type pendingTool struct {
 }
 
 const imageAttachment = "[Image attachment]"
+const maxJSONLineSize = 32 * 1024 * 1024
 
 func ParseFile(path string) (Transcript, error) {
 	path = NormalizeTranscriptPath(path)
@@ -129,7 +130,7 @@ func rawEntryType(raw json.RawMessage) string {
 func Detect(data []byte) Provider {
 	s := bufio.NewScanner(bytes.NewReader(data))
 	buf := make([]byte, 0, 1024*1024)
-	s.Buffer(buf, 32*1024*1024)
+	s.Buffer(buf, maxJSONLineSize)
 	for s.Scan() {
 		line := bytes.TrimSpace(s.Bytes())
 		if len(line) == 0 {
@@ -435,9 +436,17 @@ func readJSONLines(data []byte) ([]jsonLine, error) {
 
 // scanJSONLines lends the raw bytes to visit until the next scan.
 func scanJSONLines(data []byte, visit func(jsonLine)) error {
+	// Short malformed records are already ignored below. Check an oversized
+	// unterminated tail first so it cannot trip the scanner's token limit.
+	if len(data) >= maxJSONLineSize && data[len(data)-1] != '\n' {
+		start := bytes.LastIndexByte(data, '\n') + 1
+		if len(data)-start >= maxJSONLineSize && !json.Valid(data[start:]) {
+			data = data[:start]
+		}
+	}
 	s := bufio.NewScanner(bytes.NewReader(data))
 	buf := make([]byte, 0, 1024*1024)
-	s.Buffer(buf, 32*1024*1024)
+	s.Buffer(buf, maxJSONLineSize)
 	lineNumber := 0
 	for s.Scan() {
 		lineNumber++

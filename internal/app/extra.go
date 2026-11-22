@@ -115,7 +115,9 @@ func runExport(args []string, stdout io.Writer) error {
 	if c.out == "" {
 		return errors.New("export requires --out")
 	}
-	return renderPath(fs.Arg(0), stdout, c, sliceSpec, turnSlice, -1, -1, 0, -1, 25, 50)
+	selection := newBlockSelection()
+	selection.slice, selection.turnSlice = sliceSpec, turnSlice
+	return renderPath(fs.Arg(0), stdout, c, selection, pageFlags{}, fs)
 }
 
 func runSplit(args []string, stdout io.Writer) error {

@@ -141,6 +141,7 @@ type usageCandidate struct {
 }
 
 func InspectCompactionsFile(path string) (CompactionReport, error) {
+	path = NormalizeTranscriptPath(path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return CompactionReport{}, err

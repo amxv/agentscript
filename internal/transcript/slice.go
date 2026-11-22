@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -48,35 +49,30 @@ func SliceBlocks(blocks []Block, spec SliceSpec, last, around, before, after int
 	if around >= 0 {
 		start := around - before
 		end := around + after
-		if start < 0 {
-			start = 0
-		}
-		if end >= len(blocks) {
-			end = len(blocks) - 1
-		}
-		if start > end || len(blocks) == 0 {
-			return nil
-		}
-		return blocks[start : end+1]
+		spec = SliceSpec{From: &start, To: &end}
 	}
 	start := 0
 	end := len(blocks)
 	if spec.From != nil {
-		start = *spec.From
+		start = sort.Search(len(blocks), func(i int) bool { return blocks[i].Index >= *spec.From })
 	}
 	if spec.To != nil {
-		end = *spec.To + 1
-	}
-	if start < 0 {
-		start = 0
-	}
-	if end > len(blocks) {
-		end = len(blocks)
+		end = sort.Search(len(blocks), func(i int) bool { return blocks[i].Index > *spec.To })
 	}
 	if start > end {
 		return nil
 	}
 	return blocks[start:end]
+}
+
+// LastTurnBlocks selects user turns before any display filters are applied.
+func LastTurnBlocks(blocks []Block, count int) []Block {
+	if len(blocks) == 0 {
+		return blocks
+	}
+	first := max(1, blocks[len(blocks)-1].Turn-count+1)
+	start := sort.Search(len(blocks), func(i int) bool { return blocks[i].Turn >= first })
+	return blocks[start:]
 }
 
 func SliceBlocksByTurn(blocks []Block, spec SliceSpec) []Block {

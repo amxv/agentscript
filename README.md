@@ -108,6 +108,10 @@ Every renderable block gets a stable index:
 
 Hidden blocks keep their original indexes, so slices remain stable even when you hide thinking or tool output.
 
+You can read an active Claude or Codex transcript. The parser skips incomplete JSON records and includes a valid final record even before its newline arrives.
+
+On Windows, use native drive, UNC, or extended paths such as `C:\Users\me\session.jsonl`, `\\server\share\session.jsonl`, and `\\?\C:\Users\me\session.jsonl`. Transcript commands also accept file URLs such as `file:///C:/Users/me/session.jsonl` and `file://server/share/session.jsonl`.
+
 Codex shell commands, edits, and tool calls inside code-mode `exec` have their own blocks. Codex progress messages are assistant blocks and remain visible with `--hide-thinking`. Image attachments appear as text markers, and empty tool results still have an indexed header.
 
 Show user-turn numbers too:
@@ -188,6 +192,18 @@ Render from block 100 to the end:
 ```bash
 agentscript slice transcript.jsonl 100:
 ```
+
+Select the newest blocks or numbered user turns with either command:
+
+```bash
+agentscript open transcript.jsonl --last-turns 3 --hide-tool-results
+agentscript slice --last 80 transcript.jsonl --max-chars 20000
+agentscript open transcript.jsonl --last 80 --max-chars 20000 --format json
+```
+
+`--last N` and `--last-turns N` select before display filters. `slice` accepts either tail flag in place of a range. A numbered turn starts with a user message and includes the activity that follows it until the next user message.
+
+`--max-chars N` (default `0`, unlimited) limits rendered transcript characters at block boundaries. When output stops early, copy the continuation command to read from the first omitted block through the end of the original selection, with the same rendering flags. JSON puts this information in `next.index` and `next.command`. The continuation notice and minimum format framing can exceed the budget. If a single block needs more room, the continuation for an empty page raises the budget enough to show that block.
 
 Show context around a block:
 

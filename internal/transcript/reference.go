@@ -13,27 +13,43 @@ import (
 // NormalizeTranscriptPath makes copied shell paths and file:// URLs usable by
 // every command without requiring the caller to pre-normalize them.
 func NormalizeTranscriptPath(value string) string {
-	value = strings.TrimSpace(value)
-	if strings.HasPrefix(strings.ToLower(value), "file://") {
-		if parsed, err := url.Parse(value); err == nil {
-			path := parsed.Path
-			if parsed.Host != "" && !strings.EqualFold(parsed.Host, "localhost") {
-				path = "//" + parsed.Host + path
-			}
-			if unescaped, err := url.PathUnescape(path); err == nil {
-				path = unescaped
-			}
-			if runtime.GOOS == "windows" && len(path) >= 3 && path[0] == '/' && path[2] == ':' {
-				path = path[1:]
-			}
-			value = filepath.FromSlash(path)
-		}
+	windows := runtime.GOOS == "windows"
+	value = transcriptPath(strings.TrimSpace(value), windows)
+	if windows && strings.HasPrefix(value, "~\\") {
+		value = "~/" + value[2:]
 	}
 	value = expandHome(value)
-	if value == "" {
+	if value == "" || windows && strings.HasPrefix(value, `\\?\`) {
 		return value
 	}
 	return filepath.Clean(value)
+}
+
+// transcriptPath decodes a file reference before host-specific cleaning.
+func transcriptPath(value string, windows bool) string {
+	if strings.HasPrefix(strings.ToLower(value), "file://") {
+		if parsed, err := url.Parse(value); err == nil {
+			path := parsed.Path
+			switch {
+			case windows && isWindowsDrive(parsed.Host):
+				path = parsed.Host + path
+			case parsed.Host != "" && !strings.EqualFold(parsed.Host, "localhost"):
+				path = "//" + parsed.Host + path
+			}
+			if windows && strings.HasPrefix(path, "/") && isWindowsDrive(path[1:]) {
+				path = path[1:]
+			}
+			value = path
+		}
+	}
+	if windows {
+		return strings.ReplaceAll(value, "/", `\`)
+	}
+	return value
+}
+
+func isWindowsDrive(path string) bool {
+	return len(path) >= 2 && path[1] == ':' && ('A' <= path[0] && path[0] <= 'Z' || 'a' <= path[0] && path[0] <= 'z')
 }
 
 func IsSessionID(value string) bool {

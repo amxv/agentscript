@@ -24,6 +24,8 @@ Indexes are assigned before filtering. This means `--hide-thinking` may show gap
 
 Codex shell commands, edits, and tool calls inside code-mode `exec` have separate call and result blocks. Codex progress messages count as assistant messages. Image attachments appear as text markers, and tool results keep their index even when they have no text.
 
+While a transcript is being written, an incomplete final JSON record is skipped. A valid final record is included even before its newline arrives.
+
 ## Turns
 
 A turn starts at each user message. Use `--turns` to display turn numbers:
@@ -38,7 +40,14 @@ Then slice by turn:
 agentscript open transcript.jsonl --turn-slice 4:7
 ```
 
-Block indexes remain the primary addressing system; turn indexes are a convenience for conversation-level ranges.
+To see recent activity, select the last numbered turns or blocks:
+
+```bash
+agentscript open transcript.jsonl --last-turns 3 --hide-tool-results
+agentscript slice transcript.jsonl --last 80 --messages-only
+```
+
+Both tail flags work with `open` and `slice` and count before display filters. A turn includes the user message and the activity that follows it. The blocks before the first user message are outside numbered turns.
 
 ## Folding and expansion
 
@@ -59,6 +68,17 @@ Expand everything with:
 ```bash
 agentscript open transcript.jsonl --max-lines 40 --expand all
 ```
+
+## Output budget
+
+Use `--max-chars` with `open` or `slice` to page the rendered transcript without splitting a block:
+
+```bash
+agentscript open transcript.jsonl --last-turns 3 --max-chars 20000
+agentscript slice transcript.jsonl 100:300 --max-chars 20000 --format json
+```
+
+The continuation command starts at the first omitted block and keeps the original selection's end and rendering flags. In JSON, read the next stable block index from `next.index` and the command from `next.command`. The continuation metadata and minimum format framing can exceed the budget. If a page is empty because its first block is too large, its continuation raises the budget enough to fit that block.
 
 ## Profiles
 
