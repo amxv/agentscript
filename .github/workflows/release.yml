@@ -48,22 +48,28 @@ jobs:
 
   build-binaries:
     needs: quality
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
           - goos: darwin
             goarch: amd64
+            runner: macos-15-intel
           - goos: darwin
             goarch: arm64
+            runner: macos-15
           - goos: linux
             goarch: amd64
+            runner: ubuntu-latest
           - goos: linux
             goarch: arm64
+            runner: ubuntu-24.04-arm
           - goos: windows
             goarch: amd64
+            runner: windows-2025
           - goos: windows
             goarch: arm64
+            runner: windows-11-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -74,7 +80,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: false
 
-      - name: Build binary
+      - name: Build and verify binary
+        shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p dist
@@ -82,15 +89,12 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             EXT=".exe"
           fi
+          BINARY="dist/${CLI_BINARY}_${{ matrix.goos }}_${{ matrix.goarch }}${EXT}"
           CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -trimpath -ldflags="-s -w -X github.com/amxv/agentscript/internal/buildinfo.Version=${VERSION}" \
-            -o "dist/${{ env.CLI_BINARY }}_${{ matrix.goos }}_${{ matrix.goarch }}${EXT}" ./cmd/${{ env.CLI_BINARY }}
-
-      - name: Verify embedded version
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          test "$(dist/${{ env.CLI_BINARY }}_linux_amd64 --version)" = "${{ env.CLI_BINARY }} ${VERSION}"
+            -o "$BINARY" "./cmd/${CLI_BINARY}"
+          BUILT_VERSION="$("$BINARY" --version)"
+          test "$BUILT_VERSION" = "${CLI_BINARY} ${VERSION}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -108,6 +112,13 @@ jobs:
           path: dist
           merge-multiple: true
           digest-mismatch: warn
+
+      - name: Generate SHA-256 checksums
+        working-directory: dist
+        shell: bash
+        run: |
+          sha256sum "${CLI_BINARY}"_{darwin,linux}_{amd64,arm64} \
+            "${CLI_BINARY}"_windows_{amd64,arm64}.exe > checksums.txt
 
       - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v3
