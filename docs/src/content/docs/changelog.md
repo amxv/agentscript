@@ -6,6 +6,15 @@ category: Reference
 summary: What changed in each agentscript release.
 ---
 
+## v0.4.0 (2026-11-22)
+
+- `open` and `slice` accept `--last-turns N` to show only the last N user-started turns. `slice` also accepts `--last N` in place of a positional range. Stable block indexes are preserved.
+- `--max-chars N` on `open` and `slice` caps total rendered output at block boundaries and prints the exact command that continues from the next block. JSON output includes `next.index` and `next.command` when truncated.
+- Transcripts that are still being written are readable: an unterminated partial last line is skipped instead of failing.
+- Transcript references accept Windows drive, UNC, and `\\?\` paths, plus `file://` URLs for drive and UNC paths.
+- Releases now publish `checksums.txt` (SHA-256, `sha256sum` format) alongside the six platform binaries, and every binary's `--version` is verified on its native runner.
+- GitHub Actions workflows run on Node 24 action runtimes.
+
 ## v0.3.2 (2026-11-22)
 
 Compatibility update for current Claude Code (2.1.32x) and Codex (0.171) transcripts.
