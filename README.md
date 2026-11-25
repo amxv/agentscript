@@ -1,6 +1,6 @@
 # agentscript
 
-`agentscript` is a terminal-first handoff, search, and transcript reader for Claude Code, Codex, and Antigravity CLI JSONL sessions.
+`agentscript` is a terminal-first handoff, search, and transcript reader for Claude Code, Codex, and Google Antigravity CLI (Gemini) JSONL sessions.
 
 The Go module stays at the repository root, the Astro site lives in `docs/`, and the npm CLI package is assembled from `npm/` (including a Go source-build fallback).
 

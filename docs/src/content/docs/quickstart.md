@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Hand off, search, and inspect Claude Code, Codex, and Antigravity CLI JSONL transcripts.
+description: Hand off, search, and inspect Claude Code, Codex, and Google Antigravity CLI (Gemini) JSONL transcripts.
 order: 1
 category: Start
 summary: Install agentscript, transfer agent context, search history, and inspect transcripts.
