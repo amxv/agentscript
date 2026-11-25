@@ -6,6 +6,12 @@ category: Reference
 summary: What changed in each agentscript release.
 ---
 
+## v0.5.0 (2026-11-25)
+
+- Added Antigravity CLI support (`--provider antigravity`) with parity across `open`, `slice`, `handoff`, `search`, `list`, session ID lookup, `compactions`, and change and command activity.
+- Parses native Antigravity `transcript.jsonl` logs, ACP captures, and headless stream and JSON exports into the same stably indexed blocks as Claude Code and Codex.
+- Discovery finds Antigravity transcripts under `~/.gemini/antigravity-cli/brain/<uuid>/.system_generated/logs/` on macOS and Linux, and `%USERPROFILE%\.gemini\antigravity-cli\brain\<uuid>\.system_generated\logs\` on Windows. Use `--roots` for custom locations.
+
 ## v0.4.0 (2026-11-22)
 
 - `open` and `slice` accept `--last-turns N` to show only the last N user-started turns. `slice` also accepts `--last N` in place of a positional range. Stable block indexes are preserved.

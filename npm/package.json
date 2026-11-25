@@ -1,6 +1,6 @@
 {
   "name": "@amxv/agentscript",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Agent handoff, history search, and readable Claude Code, Codex, and Antigravity transcript CLI",
   "license": "MIT",
   "author": "amxv",
