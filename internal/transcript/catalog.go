@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const catalogCacheVersion = 2
+const catalogCacheVersion = 3
 
 var catalogTTL = 30 * time.Second
 

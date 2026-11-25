@@ -73,7 +73,7 @@ func TestDefaultRootsUseEnvironmentConfigDirs(t *testing.T) {
 	t.Setenv("CODEX_HOME", codexHome)
 
 	roots := DefaultRoots()
-	if len(roots) != 2 || roots[0] != claudeProjects || roots[1] != codexSessions {
+	if len(roots) != 3 || roots[0] != claudeProjects || roots[1] != codexSessions {
 		t.Fatalf("DefaultRoots() = %q, want [%q %q]", roots, claudeProjects, codexSessions)
 	}
 }
@@ -84,12 +84,14 @@ func TestDefaultRootsFallBackWhenEnvironmentDirsAreMissing(t *testing.T) {
 	t.Setenv("CODEX_HOME", filepath.Join(root, "missing-codex"))
 
 	roots := DefaultRoots()
-	if len(roots) != 2 || roots[0] != "~/.claude/projects" || roots[1] != "~/.codex/sessions" {
+	if len(roots) != 3 || roots[0] != "~/.claude/projects" || roots[1] != "~/.codex/sessions" {
 		t.Fatalf("DefaultRoots() = %q, want standard fallbacks", roots)
 	}
 }
 
 func TestDiscoveryCatalogSupportsSwitchingProvidersWithCustomConfigDirs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	root := t.TempDir()
 	claudeConfig, codexHome := filepath.Join(root, "claude"), filepath.Join(root, "codex")
 	t.Setenv("CLAUDE_CONFIG_DIR", claudeConfig)

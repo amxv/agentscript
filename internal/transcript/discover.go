@@ -27,6 +27,8 @@ func DiscoverSources(limit int, provider Provider, sources []SessionSource) ([]S
 		sources = DefaultSources()
 	}
 	var sessions []Session
+	seen := map[string]bool{}
+	metadata := map[string]map[string]agyMetadata{}
 	for _, source := range sources {
 		root := expandHome(source.Path)
 		if absolute, err := filepath.Abs(root); err == nil {
@@ -37,28 +39,29 @@ func DiscoverSources(limit int, provider Provider, sources []SessionSource) ([]S
 			continue
 		}
 		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
-			if !strings.EqualFold(filepath.Ext(path), ".jsonl") {
-				return nil
-			}
-			info, err := d.Info()
 			if err != nil {
 				return nil
 			}
-			p := source.Provider
-			if p == ProviderUnknown || p == "" {
-				p = providerFromPath(path)
-				if p == ProviderUnknown {
-					p = detectProviderFile(path)
+			var skip error
+			if d.IsDir() {
+				if d.Name() == "chunks" && agySessionDir(filepath.Join(filepath.Dir(path), "transcript.jsonl")) != "" {
+					return fs.SkipDir
 				}
+				if filepath.Base(filepath.Dir(path)) != "brain" || !IsSessionID(d.Name()) {
+					return nil
+				}
+				path = preferredAgyLog(path)
+				skip = fs.SkipDir
 			}
-			if provider != "" && provider != ProviderUnknown && p != provider {
-				return nil
+			if path == "" || seen[path] {
+				return skip
 			}
-			sessions = append(sessions, Session{Path: path, Provider: p, ModTime: info.ModTime(), Size: info.Size(), Title: titleFromPath(path)})
-			return nil
+			session, ok := discoverTranscript(path, source.Provider, metadata)
+			if ok && (provider == "" || provider == ProviderUnknown || session.Provider == provider) {
+				seen[path] = true
+				sessions = append(sessions, session)
+			}
+			return skip
 		})
 	}
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i].ModTime.After(sessions[j].ModTime) })
@@ -68,27 +71,69 @@ func DiscoverSources(limit int, provider Provider, sources []SessionSource) ([]S
 	return sessions, nil
 }
 
+func discoverTranscript(path string, hint Provider, metadata map[string]map[string]agyMetadata) (Session, bool) {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return Session{}, false
+	}
+	s := Session{Path: path, Provider: hint, Title: titleFromPath(path)}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".jsonl":
+		if dir := agySessionDir(path); dir != "" {
+			if path != preferredAgyLog(dir) {
+				return Session{}, false
+			}
+			s.ID = filepath.Base(dir)
+			s.Provider = ProviderAntigravity
+			brain := filepath.Dir(dir)
+			if _, ok := metadata[brain]; !ok {
+				metadata[brain] = agyMetadataForBrain(brain)
+			}
+			applyAgyMetadata(&s, metadata[brain][s.ID])
+		} else if hint == ProviderUnknown || hint == "" || hint == ProviderAntigravity {
+			s.Provider = providerFromPath(path)
+			if s.Provider == ProviderUnknown {
+				s.Provider = detectProviderFile(path)
+			}
+			if s.Provider == ProviderAntigravity {
+				s = HydrateSession(s)
+			}
+		}
+	case ".json":
+		if hint == ProviderClaude || hint == ProviderCodex {
+			return Session{}, false
+		}
+		obj := readAgyExport(path)
+		if obj == nil {
+			return Session{}, false
+		}
+		s.Provider = ProviderAntigravity
+		hydrateAgyLine(&s, obj)
+	default:
+		return Session{}, false
+	}
+	s.Size, s.ModTime = info.Size(), info.ModTime()
+	return s, true
+}
+
 func DefaultSources() []SessionSource {
 	return []SessionSource{
 		{Path: configSubdir("CLAUDE_CONFIG_DIR", "projects", "~/.claude/projects"), Provider: ProviderClaude},
 		{Path: configSubdir("CODEX_HOME", "sessions", "~/.codex/sessions"), Provider: ProviderCodex},
+		{Path: antigravityRoot(), Provider: ProviderAntigravity},
 	}
 }
 
-func SourcesFromRoots(roots []string, provider Provider) []SessionSource {
+func SourcesFromRoots(roots []string, _ Provider) []SessionSource {
 	if len(roots) == 0 {
 		return DefaultSources()
-	}
-	p := provider
-	if p == "" {
-		p = ProviderUnknown
 	}
 	out := make([]SessionSource, 0, len(roots))
 	for _, root := range roots {
 		if strings.TrimSpace(root) == "" {
 			continue
 		}
-		out = append(out, SessionSource{Path: root, Provider: p})
+		out = append(out, SessionSource{Path: root, Provider: ProviderUnknown})
 	}
 	return out
 }
@@ -130,22 +175,8 @@ func detectProviderFile(path string) Provider {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	for lines := 0; scanner.Scan() && lines < 80; lines++ {
-		var env struct {
-			Type string          `json:"type"`
-			Item json.RawMessage `json:"item"`
-		}
-		if json.Unmarshal(scanner.Bytes(), &env) != nil {
-			continue
-		}
-		switch env.Type {
-		case "session_meta", "thread.started":
-			return ProviderCodex
-		case "item.completed":
-			if len(env.Item) > 0 {
-				return ProviderCodex
-			}
-		case "user", "assistant":
-			return ProviderClaude
+		if p := detectProviderLine(scanner.Bytes()); p != ProviderUnknown {
+			return p
 		}
 	}
 	return ProviderUnknown
@@ -158,10 +189,27 @@ func HydrateSession(session Session) Session {
 	}
 	defer f.Close()
 
+	if session.Provider == ProviderAntigravity {
+		if dir := agySessionDir(session.Path); dir != "" && session.ID == "" {
+			session.ID = filepath.Base(dir)
+			applyAgyMetadata(&session, agyMetadataForBrain(filepath.Dir(dir))[session.ID])
+		}
+		if strings.EqualFold(filepath.Ext(session.Path), ".json") {
+			hydrateAgyLine(&session, readAgyExport(session.Path))
+			return finalizeSessionMetadata(session)
+		}
+	}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 32*1024*1024)
 	for lines := 0; scanner.Scan() && lines < 40; lines++ {
 		line := scanner.Bytes()
+		if session.Provider == ProviderAntigravity {
+			hydrateAgyLine(&session, rawObject(line))
+			if session.ID != "" && session.FirstPrompt != "" {
+				break
+			}
+			continue
+		}
 		var env struct {
 			Type      string          `json:"type"`
 			Timestamp string          `json:"timestamp"`
@@ -266,6 +314,9 @@ func finalizeSessionMetadata(session Session) Session {
 	} else if session.Project != "" {
 		session.Title = session.Project
 	}
+	if session.Provider == ProviderAntigravity && session.Project == "" && session.FirstPrompt != "" {
+		session.Title = truncateInline(session.FirstPrompt, 72)
+	}
 	return session
 }
 
@@ -343,12 +394,15 @@ func ResolveCodexSessionID(sessionID string, roots []string) (string, error) {
 	}
 	sessionID = strings.ToLower(sessionID)
 	find := func(refresh bool) ([]string, error) {
-		sessions, err := DiscoverCached(0, ProviderCodex, roots, refresh)
+		sessions, err := DiscoverCached(0, ProviderUnknown, roots, refresh)
 		if err != nil {
 			return nil, err
 		}
 		var matches []string
 		for _, session := range sessions {
+			if session.Provider != ProviderCodex && session.Provider != ProviderUnknown {
+				continue
+			}
 			base := strings.ToLower(strings.TrimSuffix(filepath.Base(session.Path), filepath.Ext(session.Path)))
 			if base == sessionID || strings.HasSuffix(base, "-"+sessionID) {
 				matches = append(matches, session.Path)

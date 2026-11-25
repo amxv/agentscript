@@ -102,7 +102,18 @@ func SearchHistory(sessions []Session, opts SearchOptions) ([]Match, SearchStats
 		matches = append(matches, searchTranscript(session, entry.Blocks, opts, compiled)...)
 	}
 
-	candidates, err := candidateSessions(uncached, opts)
+	// A match can span multiple streamed deltas, or come from normalized
+	// attachment markers and tool kinds absent from the source JSON.
+	var rawCandidates, normalizedCandidates []Session
+	for _, session := range uncached {
+		if session.Provider == ProviderAntigravity {
+			normalizedCandidates = append(normalizedCandidates, session)
+		} else {
+			rawCandidates = append(rawCandidates, session)
+		}
+	}
+	candidates, err := candidateSessions(rawCandidates, opts)
+	candidates = append(candidates, normalizedCandidates...)
 	if err != nil {
 		return nil, stats, err
 	}

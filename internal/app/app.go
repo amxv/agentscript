@@ -40,9 +40,11 @@ func Run(args []string, stdin *os.File, stdout, stderr io.Writer) error {
 	case "handoff", "continue":
 		return runHandoff(args[1:], stdout)
 	case "open":
-		return runOpen(args[1:], stdin, stdout, stderr, false)
+		return runOpen(args[1:], stdin, stdout, stderr, printOpenHelp, nil)
 	case "codex":
-		return runOpen(args[1:], stdin, stdout, stderr, true)
+		return runOpen(args[1:], stdin, stdout, stderr, printCodexHelp, transcript.ResolveCodexSessionID)
+	case "antigravity", "agy":
+		return runOpen(args[1:], stdin, stdout, stderr, printAntigravityHelp, transcript.ResolveAntigravitySessionID)
 	case "slice":
 		return runSlice(args[1:], stdout)
 	case "list", "ls":
@@ -212,13 +214,9 @@ func addCommonFlags(fs *flag.FlagSet, c *commonFlags) {
 	fs.StringVar(&c.markdownStyle, "md-style", "", "markdown style: compact, llm-context, audit")
 }
 
-func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSession bool) error {
+func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, help func(io.Writer), resolveID func(string, []string) (string, error)) error {
 	if len(args) == 1 && isHelpArg(args[0]) {
-		if codexSession {
-			printCodexHelp(stdout)
-		} else {
-			printOpenHelp(stdout)
-		}
+		help(stdout)
 		return nil
 	}
 
@@ -238,7 +236,7 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 	fs.SetOutput(stderr)
 	addCommonFlags(fs, &c)
 	addPageFlags(fs, &page, &selection)
-	fs.StringVar(&pathFlag, "path", "", "path to a Claude Code or Codex JSONL transcript")
+	fs.StringVar(&pathFlag, "path", "", "path to a Claude Code, Codex, or Antigravity transcript")
 	fs.StringVar(&pathFlag, "p", "", "alias for --path")
 	fs.StringVar(&selection.slice, "slice", "", "slice by stable block index, e.g. 0:100, 100:, :50")
 	fs.StringVar(&selection.turnSlice, "turn-slice", "", "slice by user-turn number, e.g. 1:5")
@@ -248,7 +246,7 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 	fs.IntVar(&selection.before, "before", 25, "number of blocks before --around")
 	fs.IntVar(&selection.after, "after", 50, "number of blocks after --around")
 	fs.IntVar(&latest, "latest", 0, "open the Nth latest transcript; 1 is most recent")
-	fs.StringVar(&provider, "provider", "", "provider filter for latest/picker: claude or codex")
+	fs.StringVar(&provider, "provider", "", "provider filter for latest/picker: claude, codex, or antigravity")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery and session ID lookup")
 	fs.StringVar(&project, "project", "", "only consider sessions whose project/cwd matches this value")
 	fs.StringVar(&since, "since", "", "only consider sessions since a date or duration such as 2026-09-01 or 30d")
@@ -258,11 +256,7 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 		return err
 	}
 	if fs.NArg() > 0 && isHelpArg(fs.Arg(0)) {
-		if codexSession {
-			printCodexHelp(stdout)
-		} else {
-			printOpenHelp(stdout)
-		}
+		help(stdout)
 		return nil
 	}
 	if err := page.validate(selection); err != nil {
@@ -272,18 +266,15 @@ func runOpen(args []string, stdin *os.File, stdout, stderr io.Writer, codexSessi
 	if fs.NArg() > 0 {
 		path = fs.Arg(0)
 	}
-	if codexSession {
-		if path == "" {
-			printCodexHelp(stdout)
-			return nil
+	if resolveID != nil && path == "" {
+		help(stdout)
+		return nil
+	}
+	if path != "" {
+		if resolveID == nil {
+			resolveID = transcript.ResolveSessionReference
 		}
-		resolved, err := transcript.ResolveCodexSessionID(path, splitCSV(roots))
-		if err != nil {
-			return err
-		}
-		path = resolved
-	} else if path != "" {
-		resolved, err := transcript.ResolveSessionReference(path, splitCSV(roots))
+		resolved, err := resolveID(path, splitCSV(roots))
 		if err != nil {
 			return err
 		}
@@ -338,7 +329,10 @@ func runSlice(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("slice", flag.ContinueOnError)
 	addCommonFlags(fs, &c)
 	addPageFlags(fs, &page, &selection)
-	if err := fs.Parse(interspersed(args, pageValueFlags())); err != nil {
+	fs.StringVar(&selection.turnSlice, "turn-slice", "", "select an inclusive user-turn range")
+	valueFlags := pageValueFlags()
+	valueFlags["turn-slice"] = true
+	if err := fs.Parse(interspersed(args, valueFlags)); err != nil {
 		return err
 	}
 	if fs.NArg() == 0 || isHelpArg(fs.Arg(0)) {
@@ -349,7 +343,7 @@ func runSlice(args []string, stdout io.Writer) error {
 	if err := page.validate(selection); err != nil {
 		return err
 	}
-	if selection.slice == "" && selection.last == 0 && selection.lastTurns == 0 {
+	if selection.slice == "" && selection.turnSlice == "" && selection.last == 0 && selection.lastTurns == 0 {
 		printSliceHelp(stdout)
 		return nil
 	}
@@ -369,7 +363,7 @@ func runList(args []string, stdout io.Writer) error {
 	var refresh bool
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.IntVar(&latest, "latest", 50, "number of latest transcripts to show")
-	fs.StringVar(&provider, "provider", "", "provider filter: claude or codex")
+	fs.StringVar(&provider, "provider", "", "provider filter: claude, codex, or antigravity")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery")
 	fs.StringVar(&project, "project", "", "only show sessions whose project/cwd matches this value")
 	fs.StringVar(&since, "since", "", "only show sessions since a date or duration such as 30d")
@@ -411,7 +405,7 @@ func runSearch(args []string, stdout io.Writer) error {
 	fs.IntVar(&latest, "latest", 0, "search only the N latest transcripts (default: all)")
 	fs.IntVar(&limit, "limit", 20, "maximum matching sessions to print; 0 means all")
 	fs.IntVar(&hits, "hits", 3, "maximum matching blocks to print per session; 0 means all")
-	fs.StringVar(&provider, "provider", "", "provider filter: claude or codex")
+	fs.StringVar(&provider, "provider", "", "provider filter: claude, codex, or antigravity")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery")
 	fs.StringVar(&project, "project", "", "only search sessions whose project/cwd matches this value")
 	fs.StringVar(&since, "since", "", "only search sessions since a date or duration such as 30d")
@@ -750,6 +744,8 @@ func parseProvider(v string) transcript.Provider {
 		return transcript.ProviderClaude
 	case "codex":
 		return transcript.ProviderCodex
+	case "antigravity", "agy":
+		return transcript.ProviderAntigravity
 	default:
 		return ""
 	}
@@ -782,7 +778,7 @@ func isHelpArg(v string) bool {
 
 func printRootHelp(w io.Writer) {
 	writeLines(w,
-		"agentscript - readable Claude Code and Codex transcript CLI",
+		"agentscript - read Claude Code, Codex, and Antigravity transcripts",
 		"",
 		"Usage:",
 		"  agentscript [--version]",
@@ -792,8 +788,9 @@ func printRootHelp(w io.Writer) {
 		"  handoff <path>    continuation-ready context for another agent (alias: continue)",
 		"  open [path]       open/render a transcript, or pick from latest sessions",
 		"  codex <session-id>  open/render a Codex transcript by session ID",
+		"  antigravity <session-id>  open an Antigravity conversation by UUID (alias: agy)",
 		"  slice <path> <range>  render a stable block-index range or select a tail",
-		"  search <query>    search Claude/Codex transcript history",
+		"  search <query>    search transcript history across providers",
 		"  index             inspect/rebuild the normalized search cache",
 		"  list              list latest discovered transcripts",
 		"  commands          show shell commands and optional outputs",
@@ -820,6 +817,7 @@ func printRootHelp(w io.Writer) {
 		"  agentscript search \"publish-pr\" --provider codex",
 		"  agentscript search \"old migration\" --project agentscript --since 90d",
 		"  agentscript list --latest 20",
+		"  agentscript open --provider antigravity --latest 1",
 	)
 }
 
@@ -849,6 +847,7 @@ func printOpenHelp(w io.Writer) {
 		"  --format text|md|html|json  output format",
 		"  --out file             write output to file",
 		"  --project name         restrict latest/picker discovery to a project/cwd",
+		"  --provider name        restrict latest/picker to claude, codex, or antigravity",
 		"  --since 30d            restrict latest/picker discovery by recency",
 		"",
 		"Use --last-turns as the selection on its own. JSON pages include next.index and next.command when truncated.",
@@ -882,6 +881,26 @@ func printCodexHelp(w io.Writer) {
 	)
 }
 
+func printAntigravityHelp(w io.Writer) {
+	writeLines(w,
+		"agentscript antigravity - open an Antigravity conversation by UUID (alias: agy)",
+		"",
+		"Usage:",
+		"  agentscript antigravity <session-id> [flags]",
+		"  agentscript agy <session-id> [--roots <paths>] [flags]",
+		"",
+		"Antigravity CLI stores transcript JSONL under ~/.gemini/antigravity-cli/brain.",
+		"On Windows the default is %USERPROFILE%\\.gemini\\antigravity-cli\\brain.",
+		"Use --roots to search a custom brain directory or exported captures.",
+		"",
+		"Examples:",
+		"  agentscript agy 019f91bc-123f-7692-8a78-21e54d6677e6 --last-turns 2",
+		"  agentscript open --provider antigravity --latest 1",
+		"",
+		"Rendering flags are the same as for agentscript open.",
+	)
+}
+
 func printSliceHelp(w io.Writer) {
 	writeLines(w,
 		"agentscript slice - render a stable block-index range or transcript tail",
@@ -890,6 +909,7 @@ func printSliceHelp(w io.Writer) {
 		"  agentscript slice <path> <range> [flags]",
 		"  agentscript slice <path> --last N [flags]",
 		"  agentscript slice <path> --last-turns N [flags]",
+		"  agentscript slice <path> --turn-slice 2:4 [flags]",
 		"",
 		"Tail selection counts blocks or numbered user turns before display filters.",
 		"Use --max-chars N to page at block boundaries. JSON includes next.index and next.command when truncated.",
@@ -904,7 +924,7 @@ func printSliceHelp(w io.Writer) {
 
 func printSearchHelp(w io.Writer) {
 	writeLines(w,
-		"agentscript search - search Claude Code and Codex transcript history",
+		"agentscript search - search Claude Code, Codex, and Antigravity transcript history",
 		"",
 		"Usage:",
 		"  agentscript search <query> [flags]",
@@ -915,7 +935,7 @@ func printSearchHelp(w io.Writer) {
 		"Important flags:",
 		"  --project name         filter by normalized project/cwd",
 		"  --since 30d            filter by date/duration",
-		"  --provider codex       filter provider",
+		"  --provider name        filter by claude, codex, or antigravity",
 		"  --limit 20             maximum matching sessions printed",
 		"  --hits 3               maximum hits printed per session",
 		"  --format json          structured output",
@@ -934,7 +954,7 @@ func printListHelp(w io.Writer) {
 		"agentscript list - list latest discovered transcripts",
 		"",
 		"Usage:",
-		"  agentscript list [--latest 50] [--provider claude|codex] [--project name] [--since 30d]",
+		"  agentscript list [--latest 50] [--provider claude|codex|antigravity] [--project name] [--since 30d]",
 	)
 }
 

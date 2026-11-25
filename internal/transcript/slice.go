@@ -70,6 +70,18 @@ func LastTurnBlocks(blocks []Block, count int) []Block {
 	if len(blocks) == 0 {
 		return blocks
 	}
+	if blocks[0].Provider == ProviderAntigravity {
+		// ACP captures can interleave turns from multiple sessions.
+		maxTurn := 0
+		for _, block := range blocks {
+			maxTurn = max(maxTurn, block.Turn)
+		}
+		if maxTurn == 0 {
+			return blocks
+		}
+		first := max(1, maxTurn-count+1)
+		return SliceBlocksByTurn(blocks, SliceSpec{From: &first})
+	}
 	first := max(1, blocks[len(blocks)-1].Turn-count+1)
 	start := sort.Search(len(blocks), func(i int) bool { return blocks[i].Turn >= first })
 	return blocks[start:]

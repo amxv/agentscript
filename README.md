@@ -1,6 +1,6 @@
 # agentscript
 
-`agentscript` is a terminal-first handoff, search, and transcript reader for Claude Code and Codex JSONL sessions.
+`agentscript` is a terminal-first handoff, search, and transcript reader for Claude Code, Codex, and Antigravity CLI JSONL sessions.
 
 The Go module stays at the repository root, the Astro site lives in `docs/`, and the npm CLI package is assembled from `npm/` (including a Go source-build fallback).
 
@@ -37,7 +37,7 @@ agentscript continue /path/to/transcript.jsonl
 agentscript /path/to/transcript.jsonl
 ```
 
-You can also use a full Claude/Codex session UUID instead of a path, or paste a `file://` URL:
+You can also use a full Claude/Codex/Antigravity session UUID instead of a path, or paste a `file://` URL:
 
 ```bash
 agentscript handoff 019f91bc-123f-7692-8a78-21e54d6677e6
@@ -61,6 +61,7 @@ Open a transcript by path:
 ```bash
 agentscript open ~/.claude/projects/<project>/<session>.jsonl
 agentscript open ~/.codex/sessions/<year>/<month>/<day>/<session>.jsonl
+agentscript open --provider antigravity --latest 1
 ```
 
 Open a Codex transcript by session ID:
@@ -81,7 +82,16 @@ Run `agentscript open` with no path to launch the latest-transcript picker. Disc
 ```bash
 ~/.claude/projects
 ~/.codex/sessions
+~/.gemini/antigravity-cli/brain
 ```
+
+Antigravity keeps one directory per conversation UUID. On macOS and Linux the log is `$HOME/.gemini/antigravity-cli/brain/<uuid>/.system_generated/logs/transcript.jsonl`. On Windows it is `%USERPROFILE%\.gemini\antigravity-cli\brain\<uuid>\.system_generated\logs\transcript.jsonl`. Discovery prefers the populated `transcript_full.jsonl` in that directory, which includes reasoning and longer results, and skips duplicate chunks. For a custom ACP profile or Gemini directory, pass the corresponding `brain` directory with `--roots`. [Google's transcript path reference](https://antigravity.google/docs/hooks/) and [platform-specific CLI directories](https://antigravity.google/docs/remote-control/).
+
+```bash
+agentscript agy <conversation-uuid> --last-turns 2
+agentscript list --provider antigravity --roots ~/.gemini/custom-profile/brain
+```
+
 
 Discovery keeps provider identity with the configured source, so custom `CLAUDE_CONFIG_DIR` and `CODEX_HOME` locations do not need `.claude` or `.codex` in their paths. A short-lived session catalog cache avoids repeatedly walking large transcript trees; use `--refresh` when you explicitly want to rescan them.
 
@@ -108,9 +118,11 @@ Every renderable block gets a stable index:
 
 Hidden blocks keep their original indexes, so slices remain stable even when you hide thinking or tool output.
 
-You can read an active Claude or Codex transcript. The parser skips incomplete JSON records and includes a valid final record even before its newline arrives.
+You can read an active Claude, Codex, or Antigravity transcript. The parser skips incomplete JSON records and includes a valid final record even before its newline arrives.
 
 On Windows, use native drive, UNC, or extended paths such as `C:\Users\me\session.jsonl`, `\\server\share\session.jsonl`, and `\\?\C:\Users\me\session.jsonl`. Transcript commands also accept file URLs such as `file:///C:/Users/me/session.jsonl` and `file://server/share/session.jsonl`.
+
+Antigravity native logs include step-indexed tool calls, results, and reasoning. You can also open captured Antigravity ACP JSONL and headless JSON or stream-JSON output. A result-only export contains the answer and status. Its prompt is available in the native log.
 
 Codex shell commands, edits, and tool calls inside code-mode `exec` have their own blocks. Codex progress messages are assistant blocks and remain visible with `--hide-thinking`. Image attachments appear as text markers, and empty tool results still have an indexed header.
 
@@ -170,12 +182,14 @@ agentscript open transcript.jsonl --max-lines 40 --expand all
 
 ## Compaction and usage inspection
 
-Inspect Claude and Codex lifecycle records without provider-specific `jq`:
+Inspect Claude, Codex, and Antigravity lifecycle records without provider-specific `jq`:
 
 ```bash
 agentscript compactions transcript.jsonl --format json
 agentscript compactions transcript.jsonl
 ```
+
+Antigravity reports completed checkpoint steps and correlates them with the neighboring model requests.
 
 JSON output includes ordered boundaries, provider-native metadata, raw line references, nearest usage snapshots, and normalized token fields. Claude `postTokens` is labeled as payload-only; `first_full_usage_after` exposes the later assistant usage that may include reattached system, tool, and cache context.
 
@@ -220,11 +234,12 @@ agentscript split transcript.jsonl --every 80 --out-dir parts --format html
 
 ## Search
 
-Search all discovered Claude Code and Codex history by default:
+Search all discovered Claude Code, Codex, and Antigravity CLI history by default:
 
 ```bash
 agentscript search "publish-pr"
 agentscript search "r2 cors" --provider claude
+agentscript search "missing file" --provider antigravity
 agentscript search "old migration" --project agentscript --since 180d
 ```
 

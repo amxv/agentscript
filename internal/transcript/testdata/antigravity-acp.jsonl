@@ -1,0 +1,13 @@
+{"dir":"out","msg":{"id":1,"method":"initialize","params":{}}}
+{"dir":"in","msg":{"id":1,"result":{"agentInfo":{"name":"Antigravity ACP Server"}}}}
+{"dir":"out","msg":{"id":2,"method":"session/prompt","params":{"sessionId":"a","prompt":[{"type":"text","text":"First"},{"type":"image","data":"TEST-BINARY"}]}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"a","update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"Check"}}}}}
+{"dir":"out","msg":{"id":3,"method":"session/prompt","params":{"sessionId":"b","prompt":[{"type":"text","text":"Second"}]}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"b","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Second"}}}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"a","update":{"sessionUpdate":"tool_call","toolCallId":"one","name":"mcp_example","rawInput":{"x":1},"status":"in_progress"}}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"b","update":{"sessionUpdate":"tool_call","toolCallId":"one","name":"run_command","args":{"CommandLine":"false"},"status":"in_progress"}}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"a","update":{"sessionUpdate":"tool_call_update","toolCallId":"one","name":"mcp_example","status":"completed"}}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"b","update":{"sessionUpdate":"tool_call_update","toolCallId":"one","name":"run_command","status":"completed","rawOutput":{"output":"failure","exit_code":2}}}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"b","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Good"}}}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"a","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Finished"}}}}}
+{"dir":"in","msg":{"method":"session/update","params":{"sessionId":"b","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"bye"}}}}}

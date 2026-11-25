@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Hand off, search, and inspect Claude Code and Codex JSONL transcripts.
+description: Hand off, search, and inspect Claude Code, Codex, and Antigravity CLI JSONL transcripts.
 order: 1
 category: Start
 summary: Install agentscript, transfer agent context, search history, and inspect transcripts.
@@ -44,6 +44,7 @@ Full session UUIDs and `file://` transcript URLs are accepted too.
 ```bash
 agentscript open ~/.claude/projects/<project>/<session>.jsonl
 agentscript open ~/.codex/sessions/<year>/<month>/<day>/<session>.jsonl
+agentscript open --provider antigravity --latest 1
 ```
 
 Use `open` when you want raw/explicit transcript rendering rather than the continuation-focused handoff view. Running `agentscript` by itself shows help.
@@ -60,7 +61,16 @@ By default, agentscript discovers transcripts in:
 ```bash
 ~/.claude/projects
 ~/.codex/sessions
+~/.gemini/antigravity-cli/brain
 ```
+
+Antigravity keeps one directory per conversation UUID. On macOS and Linux the log is `$HOME/.gemini/antigravity-cli/brain/<uuid>/.system_generated/logs/transcript.jsonl`. On Windows it is `%USERPROFILE%\.gemini\antigravity-cli\brain\<uuid>\.system_generated\logs\transcript.jsonl`. Discovery prefers the populated `transcript_full.jsonl` in that directory, which includes reasoning and longer results, and skips duplicate chunks. For a custom ACP profile or Gemini directory, pass the corresponding `brain` directory with `--roots`. [Google's transcript path reference](https://antigravity.google/docs/hooks/) and [platform-specific CLI directories](https://antigravity.google/docs/remote-control/).
+
+```bash
+agentscript agy <conversation-uuid> --last-turns 2
+agentscript list --provider antigravity --roots ~/.gemini/custom-profile/brain
+```
+
 
 If `CLAUDE_CONFIG_DIR` or `CODEX_HOME` are set, agentscript uses their `projects` and `sessions` subdirectories while retaining the correct provider identity even when those paths are nonstandard.
 

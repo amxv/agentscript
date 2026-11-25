@@ -6,7 +6,7 @@ import { primaryNav, siteConfig } from "../data/docs";
 const docs = (await getCollection("docs")).sort((a, b) => a.data.order - b.data.order);
 
 const signals = [
-  ["02", "providers", "Claude Code + Codex"],
+  ["03", "providers", "Claude Code + Codex + Antigravity"],
   ["∞", "stable addresses", "Filters never renumber"],
   ["01", "binary", "Go, standard library only"],
   ["06", "output views", "Text, Markdown, HTML, JSON"]
@@ -47,7 +47,7 @@ const flows = [
 
       <div class="as-hero__topline as-reveal">
         <span class="as-status"><i></i> LOCAL TRANSCRIPT INDEX / READY</span>
-        <span>CLAUDE CODE · CODEX · JSONL</span>
+        <span>CLAUDE CODE · CODEX · ANTIGRAVITY</span>
       </div>
 
       <div class="as-hero__layout">
@@ -58,7 +58,7 @@ const flows = [
             <span>usable memory.</span>
           </h1>
           <p class="as-hero__lede as-reveal as-delay-2">
-            <strong>agentscript</strong> reads Claude Code and Codex transcripts as one stream of stable,
+            <strong>agentscript</strong> reads Claude Code, Codex, and Antigravity CLI transcripts as one stream of stable,
             searchable blocks—then slices away the noise and exports exactly the context your next agent needs.
           </p>
           <div class="as-actions as-reveal as-delay-3">

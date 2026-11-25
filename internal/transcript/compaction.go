@@ -20,22 +20,23 @@ type CompactionReport struct {
 }
 
 type Compaction struct {
-	Index                       int               `json:"index"`
-	Timestamp                   string            `json:"timestamp"`
-	Provider                    Provider          `json:"provider"`
-	DurationMs                  *int64            `json:"duration_ms,omitempty"`
-	PreTotalTokens              *int64            `json:"pre_total_tokens,omitempty"`
-	ProviderPostTokens          *int64            `json:"provider_post_tokens,omitempty"`
-	ProviderPostTokensSemantics string            `json:"provider_post_tokens_semantics,omitempty"`
-	ProviderPostTokensSource    string            `json:"provider_post_tokens_source,omitempty"`
-	ContextWindow               *int64            `json:"context_window,omitempty"`
-	RemainingPercentage         *float64          `json:"remaining_percentage,omitempty"`
-	Claude                      *ClaudeCompaction `json:"claude,omitempty"`
-	Codex                       *CodexCompaction  `json:"codex,omitempty"`
-	NearestUsageBefore          *UsageSnapshot    `json:"nearest_usage_before,omitempty"`
-	NearestUsageAfter           *UsageSnapshot    `json:"nearest_usage_after,omitempty"`
-	FirstFullUsageAfter         *UsageSnapshot    `json:"first_full_usage_after,omitempty"`
-	RawEvents                   []RawEventRef     `json:"raw_events"`
+	Index                       int                    `json:"index"`
+	Timestamp                   string                 `json:"timestamp"`
+	Provider                    Provider               `json:"provider"`
+	DurationMs                  *int64                 `json:"duration_ms,omitempty"`
+	PreTotalTokens              *int64                 `json:"pre_total_tokens,omitempty"`
+	ProviderPostTokens          *int64                 `json:"provider_post_tokens,omitempty"`
+	ProviderPostTokensSemantics string                 `json:"provider_post_tokens_semantics,omitempty"`
+	ProviderPostTokensSource    string                 `json:"provider_post_tokens_source,omitempty"`
+	ContextWindow               *int64                 `json:"context_window,omitempty"`
+	RemainingPercentage         *float64               `json:"remaining_percentage,omitempty"`
+	Claude                      *ClaudeCompaction      `json:"claude,omitempty"`
+	Codex                       *CodexCompaction       `json:"codex,omitempty"`
+	Antigravity                 *AntigravityCompaction `json:"antigravity,omitempty"`
+	NearestUsageBefore          *UsageSnapshot         `json:"nearest_usage_before,omitempty"`
+	NearestUsageAfter           *UsageSnapshot         `json:"nearest_usage_after,omitempty"`
+	FirstFullUsageAfter         *UsageSnapshot         `json:"first_full_usage_after,omitempty"`
+	RawEvents                   []RawEventRef          `json:"raw_events"`
 }
 
 type ClaudeCompaction struct {
@@ -128,11 +129,12 @@ type RawEventRef struct {
 }
 
 type compactionCandidate struct {
-	position int
-	entry    jsonLine
-	refs     []RawEventRef
-	claude   *ClaudeCompaction
-	codex    *CodexCompaction
+	position    int
+	entry       jsonLine
+	refs        []RawEventRef
+	claude      *ClaudeCompaction
+	codex       *CodexCompaction
+	antigravity *AntigravityCompaction
 }
 
 type usageCandidate struct {
@@ -169,6 +171,8 @@ func InspectCompactions(data []byte) (CompactionReport, error) {
 		report.Compactions = inspectClaudeCompactions(entries)
 	case ProviderCodex:
 		report.Compactions = inspectCodexCompactions(entries)
+	case ProviderAntigravity:
+		report.Compactions = inspectAntigravityCompactions(entries)
 	}
 	return report, nil
 }
@@ -263,12 +267,13 @@ func finishCompactions(boundaries []compactionCandidate, usages []usageCandidate
 	out := make([]Compaction, 0, len(boundaries))
 	for index, boundary := range boundaries {
 		item := Compaction{
-			Index:     index,
-			Timestamp: boundary.entry.Timestamp,
-			Provider:  provider,
-			RawEvents: boundary.refs,
-			Claude:    boundary.claude,
-			Codex:     boundary.codex,
+			Index:       index,
+			Timestamp:   boundary.entry.Timestamp,
+			Provider:    provider,
+			RawEvents:   boundary.refs,
+			Claude:      boundary.claude,
+			Codex:       boundary.codex,
+			Antigravity: boundary.antigravity,
 		}
 		if boundary.claude != nil {
 			item.DurationMs = boundary.claude.DurationMs
@@ -302,6 +307,10 @@ func finishCompactions(boundaries []compactionCandidate, usages []usageCandidate
 				item.ProviderPostTokens = after.snapshot.ComputedTotalTokens
 			}
 			item.ProviderPostTokensSemantics = "provider_reported_last_usage"
+			if provider == ProviderAntigravity {
+				item.ProviderPostTokensSemantics = "next_request_usage"
+				item.ProviderPostTokensSource = after.snapshot.Source
+			}
 		}
 		if before != nil && item.PreTotalTokens == nil {
 			item.PreTotalTokens = before.snapshot.TotalTokens
@@ -662,6 +671,13 @@ func RenderCompactions(w io.Writer, report CompactionReport, format string) erro
 		_, _ = fmt.Fprintf(w, "[%d] %s\n", item.Index+1, item.Timestamp)
 		if item.Claude != nil {
 			_, _ = fmt.Fprintf(w, "  Claude: trigger=%s pre=%s post=%s (payload-only) dropped=%s duration=%s\n", item.Claude.Trigger, formatInt64(item.Claude.PreTokens), formatInt64(item.Claude.PostTokens), formatInt64(item.Claude.CumulativeDroppedTokens), formatInt64(item.DurationMs))
+		}
+		if item.Antigravity != nil {
+			_, _ = fmt.Fprintf(w, "  Antigravity: %s", item.Antigravity.Event)
+			if item.Antigravity.StepIndex != nil {
+				_, _ = fmt.Fprintf(w, " step=%d", *item.Antigravity.StepIndex)
+			}
+			_, _ = fmt.Fprintln(w)
 		}
 		if item.Codex != nil {
 			_, _ = fmt.Fprintf(w, "  Codex: window=%s previous=%s number=%s replacements=%d\n", item.Codex.WindowID, item.Codex.PreviousWindowID, formatInt64(item.Codex.WindowNumber), item.Codex.ReplacementHistoryCount)

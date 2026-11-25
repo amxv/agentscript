@@ -37,7 +37,7 @@ git clone https://github.com/es617/claude-replay.git tmp/claude-replay
 The Go parser and transcript features live in:
 
 ```bash
-internal/transcript/parser.go      # Claude/Codex parsers
+internal/transcript/parser.go      # Claude/Codex/Antigravity parsers
 internal/transcript/render.go      # text, Markdown, JSON, HTML rendering + folding
 internal/transcript/search.go      # advanced search
 internal/transcript/analysis.go    # commands, files, changes, activity

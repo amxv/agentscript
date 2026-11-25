@@ -8,9 +8,10 @@ import (
 type Provider string
 
 const (
-	ProviderUnknown Provider = "unknown"
-	ProviderClaude  Provider = "claude"
-	ProviderCodex   Provider = "codex"
+	ProviderUnknown     Provider = "unknown"
+	ProviderClaude      Provider = "claude"
+	ProviderCodex       Provider = "codex"
+	ProviderAntigravity Provider = "antigravity"
 )
 
 type Kind string

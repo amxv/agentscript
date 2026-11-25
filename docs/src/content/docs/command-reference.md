@@ -50,10 +50,12 @@ agentscript open --latest 1 [flags]
 
 On Windows, use drive paths, UNC paths, and extended paths such as `\\?\C:\logs\session.jsonl`. Use `file:///C:/logs/session.jsonl` for a drive or `file://server/share/session.jsonl` for a share. The same input syntax works for other commands that take transcript paths.
 
+Use `agentscript antigravity <uuid>` (alias `agy`) to open an Antigravity CLI conversation by ID. Add `--roots <brain-directory>` for a custom profile. The provider flag is `--provider antigravity`.
+
 Discovery filters:
 
 ```bash
---provider claude|codex
+--provider claude|codex|antigravity
 --project <name-or-cwd-fragment>
 --since 30d|2w|2026-09-01|<RFC3339>
 --refresh
@@ -95,6 +97,7 @@ agentscript slice <path> 100:
 agentscript slice <path> :50
 agentscript slice <path> --last 80
 agentscript slice <path> --last-turns 3
+agentscript slice <path> --turn-slice 2:4
 ```
 
 Equivalent `open` flags:
@@ -149,7 +152,7 @@ Search flags:
 --near <blocks>
 --search-kind <kinds>
 --tool <names>
---provider claude|codex
+--provider claude|codex|antigravity
 --project <name-or-cwd-fragment>
 --since <date-or-duration>
 --latest <sessions>
@@ -212,7 +215,9 @@ agentscript compactions transcript.jsonl
 agentscript compactions transcript.jsonl --format json
 ```
 
-The command auto-detects Claude Code and Codex transcripts. JSON output includes ordered compaction boundaries, provider-native window or preserved-message metadata, raw line references, nearest usage snapshots, and normalized pre/post token fields. Claude `postTokens` is explicitly payload-only, while `first_full_usage_after` reports the next complete assistant usage snapshot.
+Antigravity stores completed compactions as checkpoint steps. The report links each checkpoint to its raw record and includes surrounding request usage when available. ACP captures only report explicitly recorded compaction events.
+
+The command auto-detects Claude Code, Codex, and Antigravity CLI transcripts. JSON output includes ordered compaction boundaries, provider-native window or preserved-message metadata, raw line references, nearest usage snapshots, and normalized pre/post token fields. Claude `postTokens` is explicitly payload-only, while `first_full_usage_after` reports the next complete assistant usage snapshot.
 
 ## Export
 

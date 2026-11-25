@@ -1,6 +1,6 @@
 ---
 title: Transcript model
-description: Understand how agentscript normalizes Claude Code and Codex JSONL into stable renderable blocks and turns.
+description: Understand how agentscript normalizes Claude Code, Codex, and Antigravity CLI JSONL into stable renderable blocks and turns.
 order: 3
 category: Workflows
 summary: How block indexes, turn indexes, filtering, folding, and slicing work.
@@ -8,7 +8,7 @@ summary: How block indexes, turn indexes, filtering, folding, and slicing work.
 
 ## Stable blocks
 
-agentscript parses Claude Code and Codex sessions into one stream of renderable blocks:
+agentscript parses Claude Code, Codex, and Antigravity CLI sessions into one stream of renderable blocks:
 
 ```text
 #000 user
@@ -25,6 +25,8 @@ Indexes are assigned before filtering. This means `--hide-thinking` may show gap
 Codex shell commands, edits, and tool calls inside code-mode `exec` have separate call and result blocks. Codex progress messages count as assistant messages. Image attachments appear as text markers, and tool results keep their index even when they have no text.
 
 While a transcript is being written, an incomplete final JSON record is skipped. A valid final record is included even before its newline arrives.
+
+Antigravity native logs contain user requests, model replies, reasoning, calls, results, images, and system messages. Commands retain the tool name `run_command`. The parser pairs results with calls in step order and represents attachments with text markers. Exported Antigravity ACP JSONL and headless JSON or stream-JSON are also readable. These exports can omit prompt text, reasoning, or tool output. For the richest view, open the native full log.
 
 ## Turns
 

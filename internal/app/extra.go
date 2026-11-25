@@ -309,7 +309,7 @@ func printCompactionsHelp(w io.Writer) {
 		"Usage:",
 		"  agentscript compactions <path> [--format text|json]",
 		"",
-		"The command auto-detects Claude Code and Codex JSONL transcripts.",
+		"The command auto-detects Claude Code, Codex, and Antigravity transcripts.",
 		"JSON includes provider-native metadata, raw line references, nearest usage snapshots,",
 		"and normalized pre/post token fields. Claude postTokens is payload-only; the first",
 		"full assistant usage after a boundary can include reattached context/cache tokens.",

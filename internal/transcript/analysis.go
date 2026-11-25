@@ -131,7 +131,11 @@ func FileRefs(tr Transcript, changedOnly bool) []FileRef {
 		if changedOnly && op != "write" && op != "edit" && op != "delete" && op != "patch" {
 			continue
 		}
-		for _, key := range []string{"file_path", "path", "old_file", "new_file"} {
+		keys := []string{"file_path", "path", "old_file", "new_file"}
+		if b.Provider == ProviderAntigravity {
+			keys = append(keys, "Path", "AbsolutePath", "TargetFile")
+		}
+		for _, key := range keys {
 			if v, ok := b.ToolInput[key]; ok {
 				add(fmt.Sprint(v), b.Index, op)
 			}
@@ -188,13 +192,13 @@ func opForBlock(b Block) string {
 		}
 	}
 	switch {
-	case name == "write":
+	case name == "write" || b.Provider == ProviderAntigravity && (name == "write_file" || name == "write_to_file"):
 		return "write"
-	case name == "edit" || name == "multiedit":
+	case name == "edit" || name == "multiedit" || b.Provider == ProviderAntigravity && (name == "edit_file" || name == "replace_file_content" || name == "multi_replace_file_content"):
 		return "edit"
 	case strings.Contains(name, "patch"):
 		return "patch"
-	case name == "read":
+	case name == "read" || b.Provider == ProviderAntigravity && (name == "read_file" || name == "view_file"):
 		return "read"
 	default:
 		return name

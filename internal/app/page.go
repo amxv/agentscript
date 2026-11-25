@@ -93,6 +93,20 @@ func (p pageFlags) nextCommand(tr transcript.Transcript, fs *flag.FlagSet) func(
 			}
 		}
 	})
+	// Interleaved ACP sessions can give a selected turn gaps in block space.
+	// Carry its turn bounds into the continuation to preserve those gaps.
+	for i := 1; i < len(tr.Blocks); i++ {
+		if tr.Blocks[i].Index == tr.Blocks[i-1].Index+1 {
+			continue
+		}
+		minTurn, maxTurn := tr.Blocks[0].Turn, tr.Blocks[0].Turn
+		for _, block := range tr.Blocks {
+			minTurn = min(minTurn, block.Turn)
+			maxTurn = max(maxTurn, block.Turn)
+		}
+		flags = append(flags, fmt.Sprintf("--turn-slice %d:%d", minTurn, maxTurn))
+		break
+	}
 	return func(index, budget int) string {
 		end := tr.Blocks[len(tr.Blocks)-1].Index
 		command := fmt.Sprintf("%s open --path %s --slice %d:%d --max-chars %d",

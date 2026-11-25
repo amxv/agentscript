@@ -29,7 +29,7 @@ func runIndex(args []string, stdout io.Writer) error {
 	var latest int
 	var refresh bool
 	fs := flag.NewFlagSet("index "+action, flag.ContinueOnError)
-	fs.StringVar(&provider, "provider", "", "provider filter: claude or codex")
+	fs.StringVar(&provider, "provider", "", "provider filter: claude, codex, or antigravity")
 	fs.StringVar(&roots, "roots", "", "comma-separated roots for discovery")
 	fs.StringVar(&project, "project", "", "only include sessions whose project/cwd matches this value")
 	fs.StringVar(&since, "since", "", "only include sessions since a date or duration such as 30d")
@@ -164,6 +164,7 @@ func printIndexHelp(w io.Writer) {
 		"",
 		"Examples:",
 		"  agentscript index status",
+		"  agentscript index status --provider antigravity",
 		"  agentscript index rebuild --since 30d",
 		"  agentscript index rebuild --project agentscript",
 	)

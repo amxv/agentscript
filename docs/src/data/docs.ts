@@ -2,7 +2,7 @@ export const siteConfig = {
   name: "agentscript",
   strapline: "Readable agent transcripts in your terminal",
   description:
-    "Documentation for agentscript, a Go CLI for opening, searching, filtering, slicing, splitting, exporting, and auditing Claude Code and Codex JSONL transcripts.",
+    "Documentation for agentscript, a Go CLI for opening, searching, filtering, slicing, splitting, exporting, and auditing Claude Code, Codex, and Antigravity CLI JSONL transcripts.",
   repoUrl: "https://github.com/amxv/agentscript",
   accentColor: "#11120f",
   accentColorDark: "#d7ff3f",
@@ -10,7 +10,7 @@ export const siteConfig = {
     {
       title: "agentscript",
       text:
-        "A terminal-first transcript reader for Claude Code and Codex sessions with stable block indexes, turn slices, profiles, folding, and activity views."
+        "A terminal-first transcript reader for Claude Code, Codex, and Antigravity CLI sessions with stable block indexes, turn slices, profiles, folding, and activity views."
     },
     {
       title: "What this site covers",

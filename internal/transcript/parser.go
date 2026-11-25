@@ -62,8 +62,15 @@ func ParseFile(path string) (Transcript, error) {
 }
 
 func Parse(data []byte) (Transcript, error) {
-	provider := Detect(data)
+	provider, capture := detectFormat(data)
 	switch provider {
+	case ProviderAntigravity:
+		if capture {
+			blocks, err := parseAntigravityCapture(data)
+			return indexBlocks(provider, blocks, true), err
+		}
+		blocks, err := parseAntigravity(data)
+		return finish(provider, blocks), err
 	case ProviderClaude:
 		blocks, err := parseClaude(data)
 		return finish(provider, blocks), err
@@ -76,6 +83,10 @@ func Parse(data []byte) (Transcript, error) {
 }
 
 func finish(provider Provider, blocks []Block) Transcript {
+	return indexBlocks(provider, blocks, false)
+}
+
+func indexBlocks(provider Provider, blocks []Block, assignedTurns bool) Transcript {
 	out := make([]Block, 0, len(blocks))
 	turn := 0
 	for _, b := range blocks {
@@ -90,7 +101,9 @@ func finish(provider Provider, blocks []Block) Transcript {
 		}
 		b.Provider = provider
 		b.Index = len(out)
-		b.Turn = turn
+		if !assignedTurns {
+			b.Turn = turn
+		}
 		out = append(out, b)
 	}
 	return Transcript{Provider: provider, Blocks: out}
@@ -128,32 +141,54 @@ func rawEntryType(raw json.RawMessage) string {
 }
 
 func Detect(data []byte) Provider {
+	provider, _ := detectFormat(data)
+	return provider
+}
+
+func detectFormat(data []byte) (provider Provider, capture bool) {
 	s := bufio.NewScanner(bytes.NewReader(data))
-	buf := make([]byte, 0, 1024*1024)
-	s.Buffer(buf, maxJSONLineSize)
+	s.Buffer(make([]byte, 0, 1024*1024), maxJSONLineSize)
 	for s.Scan() {
-		line := bytes.TrimSpace(s.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var obj map[string]any
-		if json.Unmarshal(line, &obj) != nil {
-			continue
-		}
-		if typ, _ := obj["type"].(string); typ != "" {
-			switch typ {
-			case "session_meta", "thread.started":
-				return ProviderCodex
-			case "item.completed":
-				if _, ok := obj["item"]; ok {
-					return ProviderCodex
-				}
-			case "user", "assistant":
-				return ProviderClaude
-			}
+		if p, c := detectRecordFormat(s.Bytes()); p != ProviderUnknown {
+			return p, c
 		}
 	}
-	return ProviderUnknown
+	// Print mode can emit a single pretty-printed JSON object.
+	if data = bytes.TrimSpace(data); bytes.HasPrefix(data, []byte("{")) && bytes.ContainsRune(data, '\n') {
+		if p, c := detectRecordFormat(data); c {
+			return p, c
+		}
+	}
+	return ProviderUnknown, false
+}
+
+func detectProviderLine(line []byte) Provider {
+	provider, _ := detectRecordFormat(line)
+	return provider
+}
+
+func detectRecordFormat(line []byte) (Provider, bool) {
+	var obj map[string]any
+	if json.Unmarshal(line, &obj) != nil {
+		return ProviderUnknown, false
+	}
+	if isAntigravityRecord(obj) {
+		return ProviderAntigravity, false
+	}
+	if isAntigravityCapture(obj) {
+		return ProviderAntigravity, true
+	}
+	switch obj["type"] {
+	case "session_meta", "thread.started":
+		return ProviderCodex, false
+	case "item.completed":
+		if _, ok := obj["item"]; ok {
+			return ProviderCodex, false
+		}
+	case "user", "assistant":
+		return ProviderClaude, false
+	}
+	return ProviderUnknown, false
 }
 
 func parseClaude(data []byte) ([]Block, error) {

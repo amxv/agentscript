@@ -90,6 +90,7 @@ func printHandoffHelp(w io.Writer) {
 		"Examples:",
 		"  agentscript handoff ~/.codex/sessions/.../rollout.jsonl",
 		"  agentscript continue 019f91bc-123f-7692-8a78-21e54d6677e6",
+		"  agentscript handoff ~/.gemini/antigravity-cli/brain/<session-id>/.system_generated/logs/transcript.jsonl",
 		"  agentscript handoff transcript.jsonl --last 240",
 	)
 }

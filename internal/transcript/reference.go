@@ -62,11 +62,11 @@ func LooksLikeTranscriptReference(value string) bool {
 		return false
 	}
 	lower := strings.ToLower(trimmed)
-	return strings.HasSuffix(lower, ".jsonl") || strings.HasPrefix(lower, "file://") || IsSessionID(trimmed)
+	return strings.HasSuffix(lower, ".jsonl") || (strings.HasSuffix(lower, ".json") && readAgyExport(NormalizeTranscriptPath(trimmed)) != nil) || strings.HasPrefix(lower, "file://") || IsSessionID(trimmed)
 }
 
 // ResolveSessionReference accepts an existing transcript path, a file:// URL,
-// or a full UUID-like Claude/Codex session ID. Session IDs are resolved from
+// or a full provider session UUID. Session IDs are resolved from
 // the cached default/custom transcript catalog.
 func ResolveSessionReference(value string, roots []string) (string, error) {
 	path := NormalizeTranscriptPath(value)
@@ -79,8 +79,16 @@ func ResolveSessionReference(value string, roots []string) (string, error) {
 		return "", fmt.Errorf("transcript %q was not found", value)
 	}
 
+	return resolveUUID(token, roots, ProviderUnknown)
+}
+
+func resolveUUID(token string, roots []string, provider Provider) (string, error) {
+	if !IsSessionID(token) {
+		return "", fmt.Errorf("invalid session ID %q", token)
+	}
+	token = strings.ToLower(token)
 	find := func(refresh bool) ([]string, error) {
-		sessions, err := DiscoverCached(0, ProviderUnknown, roots, refresh)
+		sessions, err := DiscoverCached(0, provider, roots, refresh)
 		if err != nil {
 			return nil, err
 		}
